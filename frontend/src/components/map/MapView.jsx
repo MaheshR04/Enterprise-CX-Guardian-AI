@@ -1,0 +1,130 @@
+import { useEffect, useRef, useState } from 'react';
+import { Crosshair } from 'lucide-react';
+import {
+  DEFAULT_CENTER,
+  DEFAULT_ZOOM,
+  LOCATION_ZOOM,
+  OPEN_STREET_MAP_ATTRIBUTION,
+  OPEN_STREET_MAP_TILE_URL,
+  toLatLng,
+} from '../../services/mapService.js';
+
+function createUserIcon(L) {
+  return L.divIcon({
+    className: '',
+    html: '<span class="block h-5 w-5 rounded-full border-[3px] border-white bg-brand-600 shadow-[0_0_0_8px_rgba(27,154,139,0.22)]"></span>',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+}
+
+function MapView({ location, status }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const hasCenteredRef = useRef(false);
+  const leafletRef = useRef(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    async function initializeMap() {
+      const { default: L } = await import('leaflet');
+
+      if (!isMounted || !containerRef.current) {
+        return;
+      }
+
+      leafletRef.current = L;
+
+      const map = L.map(containerRef.current, {
+        center: DEFAULT_CENTER,
+        zoom: DEFAULT_ZOOM,
+        zoomControl: true,
+        attributionControl: true,
+      });
+
+      L.tileLayer(OPEN_STREET_MAP_TILE_URL, {
+        attribution: OPEN_STREET_MAP_ATTRIBUTION,
+        maxZoom: 19,
+      }).addTo(map);
+
+      markerRef.current = L.marker(DEFAULT_CENTER, {
+        icon: createUserIcon(L),
+        title: 'Current user location',
+      }).addTo(map);
+
+      mapRef.current = map;
+      setMapReady(true);
+
+      window.setTimeout(() => map.invalidateSize(), 0);
+    }
+
+    initializeMap();
+
+    return () => {
+      isMounted = false;
+      hasCenteredRef.current = false;
+      markerRef.current?.remove();
+      mapRef.current?.remove();
+      markerRef.current = null;
+      mapRef.current = null;
+      leafletRef.current = null;
+      setMapReady(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current || !markerRef.current || !location) {
+      return;
+    }
+
+    const latLng = toLatLng(location);
+    markerRef.current.setLatLng(latLng);
+
+    if (!hasCenteredRef.current) {
+      mapRef.current.flyTo(latLng, LOCATION_ZOOM, {
+        animate: true,
+        duration: 0.8,
+      });
+      hasCenteredRef.current = true;
+    }
+  }, [location]);
+
+  const recenterMap = () => {
+    if (!mapRef.current || !location) {
+      return;
+    }
+
+    mapRef.current.flyTo(toLatLng(location), LOCATION_ZOOM, {
+      animate: true,
+      duration: 0.8,
+    });
+  };
+
+  return (
+    <div className="relative min-h-[420px] overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+      <div ref={containerRef} className="absolute inset-0" />
+      <div className="pointer-events-none absolute left-4 top-4 z-[500] rounded-md bg-white/95 px-3 py-2 text-sm font-medium text-slate-700 shadow-soft">
+        {status === 'ready' && mapReady ? 'Live location active' : 'Locating user...'}
+      </div>
+      <button
+        type="button"
+        onClick={recenterMap}
+        disabled={!location}
+        className="absolute bottom-4 right-4 z-[500] inline-flex h-11 w-11 items-center justify-center rounded-md bg-white text-slate-700 shadow-soft transition hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label="Recenter map"
+        title="Recenter map"
+      >
+        <Crosshair size={19} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+export default MapView;
