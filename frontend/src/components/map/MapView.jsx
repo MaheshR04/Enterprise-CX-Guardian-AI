@@ -18,10 +18,37 @@ function createUserIcon(L) {
   });
 }
 
-function MapView({ location, status }) {
+function createDestinationIcon(L) {
+  return L.divIcon({
+    className: '',
+    html: '<span class="block h-6 w-6 rounded-full border-[3px] border-white bg-red-500 shadow-[0_0_0_8px_rgba(239,68,68,0.18)]"></span>',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+}
+
+function getRouteStyle(route, selectedRouteId) {
+  if (route.id === selectedRouteId || route.isSafest) {
+    return {
+      color: '#137c72',
+      weight: 7,
+      opacity: 0.95,
+    };
+  }
+
+  return {
+    color: '#64748b',
+    weight: 4,
+    opacity: 0.5,
+  };
+}
+
+function MapView({ destination, location, routes = [], selectedRouteId, status }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
+  const destinationMarkerRef = useRef(null);
+  const routeLayerRef = useRef(null);
   const hasCenteredRef = useRef(false);
   const leafletRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
@@ -71,8 +98,12 @@ function MapView({ location, status }) {
       isMounted = false;
       hasCenteredRef.current = false;
       markerRef.current?.remove();
+      destinationMarkerRef.current?.remove();
+      routeLayerRef.current?.remove();
       mapRef.current?.remove();
       markerRef.current = null;
+      destinationMarkerRef.current = null;
+      routeLayerRef.current = null;
       mapRef.current = null;
       leafletRef.current = null;
       setMapReady(false);
@@ -95,6 +126,38 @@ function MapView({ location, status }) {
       hasCenteredRef.current = true;
     }
   }, [location]);
+
+  useEffect(() => {
+    const L = leafletRef.current;
+
+    if (!mapRef.current || !L) {
+      return;
+    }
+
+    routeLayerRef.current?.remove();
+    routeLayerRef.current = L.layerGroup().addTo(mapRef.current);
+
+    routes.forEach((route) => {
+      L.polyline(route.geometry, getRouteStyle(route, selectedRouteId)).addTo(routeLayerRef.current);
+    });
+
+    destinationMarkerRef.current?.remove();
+    destinationMarkerRef.current = null;
+
+    if (destination) {
+      destinationMarkerRef.current = L.marker([destination.latitude, destination.longitude], {
+        icon: createDestinationIcon(L),
+        title: 'Selected destination',
+      }).addTo(mapRef.current);
+    }
+
+    if (routes.length > 0) {
+      const bounds = L.latLngBounds(routes.flatMap((route) => route.geometry));
+      mapRef.current.fitBounds(bounds, {
+        padding: [28, 28],
+      });
+    }
+  }, [destination, routes, selectedRouteId]);
 
   const recenterMap = () => {
     if (!mapRef.current || !location) {

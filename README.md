@@ -44,6 +44,15 @@ GuardianPath AI is an AI-powered real-time safety navigation and emergency respo
 - Private user and guardian rooms
 - Socket handlers for `danger-alert`, `sos-alert`, `guardian-joined`, and user disconnects
 
+## Step 5 Features
+
+- Destination search with OpenStreetMap Nominatim
+- Route alternatives with OSRM public routing
+- Safety scoring utility using demo risk zones
+- Route comparison engine for score, distance, and ETA
+- Safest route highlighting on the Leaflet map
+- Destination marker and selectable route cards
+
 ## Installation
 
 ```bash
@@ -69,6 +78,7 @@ copy frontend\.env.example frontend\.env
 The local `server/.env` file stores your MongoDB Atlas URI and development secrets. Do not commit `.env` files.
 
 The map uses OpenStreetMap tiles through Leaflet, so no billing account or map token is required.
+Route planning uses public Nominatim and OSRM endpoints for MVP development, so avoid heavy automated request traffic.
 Location access works on `localhost` during development. In production, browser geolocation requires HTTPS.
 
 ## Run Commands
@@ -149,5 +159,5 @@ GuardianPath-AI/
 
 ## Next Step
 
-Step 5 will add safe route generation and safety scoring.
+Step 6 will add danger zone detection with crime datasets and risk scoring.
 "# GuardianPath-AI" 
