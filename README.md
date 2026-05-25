@@ -53,6 +53,16 @@ GuardianPath AI is an AI-powered real-time safety navigation and emergency respo
 - Safest route highlighting on the Leaflet map
 - Destination marker and selectable route cards
 
+## Step 6 Features
+
+- Local crime-risk dataset for MVP danger zones
+- Geo-distance calculation around the user location
+- Risk score and LOW/MEDIUM/HIGH/CRITICAL classification
+- Danger-zone circles on the Leaflet map
+- Frontend warning panel when entering HIGH or CRITICAL zones
+- Short alarm tone for danger alerts
+- Realtime `danger-alert` socket emit for guardians/backend listeners
+
 ## Installation
 
 ```bash
@@ -159,5 +169,5 @@ GuardianPath-AI/
 
 ## Next Step
 
-Step 6 will add danger zone detection with crime datasets and risk scoring.
+Step 7 will add the SOS emergency system and MongoDB emergency logs.
 "# GuardianPath-AI" 

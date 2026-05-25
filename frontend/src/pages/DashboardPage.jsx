@@ -1,12 +1,15 @@
-import { useState } from 'react';
-import { LocateFixed, MapPinned, Navigation, RadioTower, Search, Siren } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertTriangle, LocateFixed, MapPinned, Navigation, RadioTower, Search } from 'lucide-react';
 import GuardianContactsEditor from '../components/forms/GuardianContactsEditor.jsx';
 import MapView from '../components/map/MapView.jsx';
+import { CRIME_ZONES } from '../data/crimeZones.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { useCurrentLocation } from '../hooks/useCurrentLocation.js';
+import { useDangerAlertSocket } from '../hooks/useDangerAlertSocket.js';
 import { useLiveTracking } from '../hooks/useLiveTracking.js';
 import { formatAccuracy, formatCoordinate, formatTimestamp } from '../services/mapService.js';
 import { fetchRouteAlternatives, searchDestinations } from '../services/routeService.js';
+import { analyzeCrimeRisk, getRiskToneClass } from '../utils/crimeRiskEngine.js';
 import { compareRoutes, formatDistance, formatDuration } from '../utils/routeComparison.js';
 
 const cards = [
@@ -21,9 +24,9 @@ const cards = [
     text: 'Socket.IO shares coordinates with the backend and private guardian rooms.',
   },
   {
-    icon: Navigation,
-    title: 'Safe route scoring',
-    text: 'Route alternatives are ranked by safety, distance, ETA, and demo risk zones.',
+    icon: AlertTriangle,
+    title: 'Danger detection',
+    text: 'Nearby risk zones are checked in realtime and alerts fire for high-risk areas.',
   },
 ];
 
@@ -38,6 +41,13 @@ function DashboardPage() {
     stopTracking,
   } = useCurrentLocation();
   const { connectedUsers, lastSharedAt, socketError, socketId, socketStatus } = useLiveTracking({
+    enabled: isTracking,
+    location,
+    token,
+  });
+  const dangerAssessment = useMemo(() => analyzeCrimeRisk(location), [location]);
+  useDangerAlertSocket({
+    assessment: dangerAssessment,
     enabled: isTracking,
     location,
     token,
@@ -159,6 +169,26 @@ function DashboardPage() {
         ))}
       </div>
 
+      {dangerAssessment.shouldAlert ? (
+        <div className="mt-8 rounded-lg border border-red-200 bg-red-50 p-5 text-red-800 shadow-soft">
+          <div className="flex items-start gap-4">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-red-600 text-white">
+              <AlertTriangle size={22} aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-sm font-bold uppercase tracking-wide">Danger zone warning</p>
+              <h2 className="mt-1 text-xl font-bold">
+                You are near a {dangerAssessment.riskLevel.toLowerCase()} risk area.
+              </h2>
+              <p className="mt-2 text-sm leading-6">
+                Closest zone: {dangerAssessment.nearbyZones[0]?.label}. Move toward a populated, well-lit route and keep
+                live tracking active.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-8 rounded-lg border border-slate-200 bg-white p-5 shadow-soft">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
           <form onSubmit={handleDestinationSearch} className="flex-1">
@@ -219,6 +249,7 @@ function DashboardPage() {
         <MapView
           destination={selectedDestination}
           location={location}
+          riskZones={CRIME_ZONES}
           routes={routes}
           selectedRouteId={selectedRouteId}
           status={locationStatus}
@@ -243,6 +274,12 @@ function DashboardPage() {
             <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3">
               <dt className="font-medium text-slate-500">Socket</dt>
               <dd className="font-semibold capitalize text-slate-900">{socketStatus}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3">
+              <dt className="font-medium text-slate-500">Risk</dt>
+              <dd className={`rounded-md px-2 py-1 text-xs font-bold ${getRiskToneClass(dangerAssessment.riskLevel)}`}>
+                {dangerAssessment.riskLevel} {dangerAssessment.riskScore}
+              </dd>
             </div>
             <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-3">
               <dt className="font-medium text-slate-500">Latitude</dt>
@@ -278,6 +315,25 @@ function DashboardPage() {
           ) : null}
           {socketId ? <p className="mt-4 truncate text-xs text-slate-400">Socket ID: {socketId}</p> : null}
 
+          {dangerAssessment.nearbyZones.length > 0 ? (
+            <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nearby risk zones</p>
+              <div className="mt-3 space-y-2">
+                {dangerAssessment.nearbyZones.slice(0, 3).map((zone) => (
+                  <div key={zone.id} className="text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-slate-900">{zone.label}</span>
+                      <span className="text-xs font-bold text-slate-500">{zone.level}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {Math.round(zone.distanceMeters)} m away • {zone.category}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <button
             type="button"
             onClick={isTracking ? stopTracking : startTracking}
@@ -297,7 +353,7 @@ function DashboardPage() {
                 Safest route score: {safestRoute?.safetyScore}
               </h2>
             </div>
-            <p className="text-sm text-slate-500">Demo risk zones will be replaced by crime data in Step 6.</p>
+            <p className="text-sm text-slate-500">Risk zones are now shared with danger detection.</p>
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">

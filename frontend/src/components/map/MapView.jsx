@@ -43,12 +43,25 @@ function getRouteStyle(route, selectedRouteId) {
   };
 }
 
-function MapView({ destination, location, routes = [], selectedRouteId, status }) {
+function getRiskZoneStyle(zone) {
+  if (zone.level === 'CRITICAL') {
+    return { color: '#dc2626', fillColor: '#ef4444', fillOpacity: 0.22, opacity: 0.65, weight: 2 };
+  }
+
+  if (zone.level === 'HIGH') {
+    return { color: '#ea580c', fillColor: '#f97316', fillOpacity: 0.2, opacity: 0.6, weight: 2 };
+  }
+
+  return { color: '#d97706', fillColor: '#f59e0b', fillOpacity: 0.16, opacity: 0.55, weight: 1 };
+}
+
+function MapView({ destination, location, riskZones = [], routes = [], selectedRouteId, status }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const destinationMarkerRef = useRef(null);
   const routeLayerRef = useRef(null);
+  const riskLayerRef = useRef(null);
   const hasCenteredRef = useRef(false);
   const leafletRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
@@ -100,10 +113,12 @@ function MapView({ destination, location, routes = [], selectedRouteId, status }
       markerRef.current?.remove();
       destinationMarkerRef.current?.remove();
       routeLayerRef.current?.remove();
+      riskLayerRef.current?.remove();
       mapRef.current?.remove();
       markerRef.current = null;
       destinationMarkerRef.current = null;
       routeLayerRef.current = null;
+      riskLayerRef.current = null;
       mapRef.current = null;
       leafletRef.current = null;
       setMapReady(false);
@@ -126,6 +141,26 @@ function MapView({ destination, location, routes = [], selectedRouteId, status }
       hasCenteredRef.current = true;
     }
   }, [location]);
+
+  useEffect(() => {
+    const L = leafletRef.current;
+
+    if (!mapRef.current || !L) {
+      return;
+    }
+
+    riskLayerRef.current?.remove();
+    riskLayerRef.current = L.layerGroup().addTo(mapRef.current);
+
+    riskZones.forEach((zone) => {
+      L.circle([zone.latitude, zone.longitude], {
+        radius: zone.radiusMeters,
+        ...getRiskZoneStyle(zone),
+      })
+        .bindPopup(`<strong>${zone.label}</strong><br/>${zone.category}<br/>Risk: ${zone.level}`)
+        .addTo(riskLayerRef.current);
+    });
+  }, [riskZones]);
 
   useEffect(() => {
     const L = leafletRef.current;

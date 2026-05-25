@@ -1,29 +1,4 @@
-const DEMO_RISK_ZONES = [
-  {
-    label: 'Late-night transit pocket',
-    latitude: 19.064,
-    longitude: 72.86,
-    radiusMeters: 850,
-    weight: 12,
-    level: 'MEDIUM',
-  },
-  {
-    label: 'Low-visibility industrial stretch',
-    latitude: 19.101,
-    longitude: 72.89,
-    radiusMeters: 1000,
-    weight: 18,
-    level: 'HIGH',
-  },
-  {
-    label: 'Crowding risk zone',
-    latitude: 19.075,
-    longitude: 72.84,
-    radiusMeters: 700,
-    weight: 10,
-    level: 'MEDIUM',
-  },
-];
+import { CRIME_ZONES } from '../data/crimeZones.js';
 
 function toRadians(value) {
   return (value * Math.PI) / 180;
@@ -44,7 +19,7 @@ export function getDistanceMeters(pointA, pointB) {
 }
 
 function getRouteRiskPenalty(route) {
-  return DEMO_RISK_ZONES.reduce((totalPenalty, zone) => {
+  return CRIME_ZONES.reduce((totalPenalty, zone) => {
     const closestDistance = route.geometry.reduce((closest, [latitude, longitude]) => {
       const distance = getDistanceMeters({ latitude, longitude }, zone);
       return Math.min(closest, distance);
@@ -86,5 +61,5 @@ export function getRiskLabel(score) {
 }
 
 export function getDemoRiskZones() {
-  return DEMO_RISK_ZONES;
+  return CRIME_ZONES;
 }
