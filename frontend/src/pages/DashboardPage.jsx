@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, LocateFixed, MapPinned, Navigation, RadioTower, Search } from 'lucide-react';
 import SosPanel from '../components/emergency/SosPanel.jsx';
 import GuardianContactsEditor from '../components/forms/GuardianContactsEditor.jsx';
