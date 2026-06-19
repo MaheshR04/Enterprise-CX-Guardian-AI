@@ -65,6 +65,12 @@ function DashboardPage() {
   const [batteryWarningActive, setBatteryWarningActive] = useState(false);
   const [batteryWarningMessage, setBatteryWarningMessage] = useState('');
   const [autoRerouteMessage, setAutoRerouteMessage] = useState('');
+  const [selectedDestination, setSelectedDestination] = useState(null);
+  const [routes, setRoutes] = useState([]);
+  const [selectedRouteId, setSelectedRouteId] = useState('');
+  const [routeStatus, setRouteStatus] = useState('');
+  const [routeError, setRouteError] = useState('');
+  const [routeLoading, setRouteLoading] = useState(false);
 
   const handleConfirmSafety = () => {
     const socket = getSocket(token);
@@ -218,12 +224,6 @@ function DashboardPage() {
   const [saving, setSaving] = useState(false);
   const [destinationQuery, setDestinationQuery] = useState('');
   const [destinationResults, setDestinationResults] = useState([]);
-  const [selectedDestination, setSelectedDestination] = useState(null);
-  const [routes, setRoutes] = useState([]);
-  const [selectedRouteId, setSelectedRouteId] = useState('');
-  const [routeStatus, setRouteStatus] = useState('');
-  const [routeError, setRouteError] = useState('');
-  const [routeLoading, setRouteLoading] = useState(false);
 
   const safestRoute = routes.find((route) => route.isSafest);
 
