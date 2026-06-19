@@ -51,11 +51,21 @@ export function useLiveTracking({ enabled, location, token }) {
       setConnectedUsers(payload || []);
     };
 
+    const handleAgentAdvisory = (payload) => {
+      window.dispatchEvent(new CustomEvent('agent-advisory', { detail: payload }));
+    };
+
+    const handleAgentEscalation = (payload) => {
+      window.dispatchEvent(new CustomEvent('agent-escalation', { detail: payload }));
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
     socket.on('user-connected', handleUserConnected);
     socket.on('connected-users', handleConnectedUsers);
+    socket.on('agent-advisory', handleAgentAdvisory);
+    socket.on('agent-escalation', handleAgentEscalation);
 
     const connectTimer = window.setTimeout(() => {
       setSocketStatus(socket.connected ? 'connected' : 'connecting');
@@ -69,6 +79,8 @@ export function useLiveTracking({ enabled, location, token }) {
       socket.off('connect_error', handleConnectError);
       socket.off('user-connected', handleUserConnected);
       socket.off('connected-users', handleConnectedUsers);
+      socket.off('agent-advisory', handleAgentAdvisory);
+      socket.off('agent-escalation', handleAgentEscalation);
       disconnectSocket();
     };
   }, [enabled, token]);
@@ -78,7 +90,7 @@ export function useLiveTracking({ enabled, location, token }) {
       return undefined;
     }
 
-    const intervalId = window.setInterval(() => {
+    const intervalId = window.setInterval(async () => {
       const socket = getSocket(token);
       const currentLocation = latestLocationRef.current;
 
@@ -86,7 +98,26 @@ export function useLiveTracking({ enabled, location, token }) {
         return;
       }
 
-      socket.emit('location-update', currentLocation, (response) => {
+      let battery = null;
+      try {
+        if (navigator.getBattery) {
+          const batteryStatus = await navigator.getBattery();
+          battery = {
+            level: batteryStatus.level,
+            charging: batteryStatus.charging,
+          };
+        }
+      } catch (err) {
+        console.error('Error fetching battery state:', err);
+      }
+
+      const payload = {
+        location: currentLocation,
+        battery,
+        activeRoute: null,
+      };
+
+      socket.emit('location-update', payload, (response) => {
         if (response?.success) {
           setLastSharedAt(Date.now());
           setSocketError('');
@@ -97,6 +128,7 @@ export function useLiveTracking({ enabled, location, token }) {
     }, LOCATION_EMIT_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
+
   }, [enabled, token]);
 
   return {

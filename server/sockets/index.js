@@ -4,14 +4,16 @@ import User from '../models/User.model.js';
 import { canTrackUser } from '../services/trackingAccess.service.js';
 import { verifyToken } from '../utils/jwt.js';
 import { getGuardianRoom, getUserRoom } from './socketRooms.js';
+import { safetyAgent } from '../agents/SafetyAgent.js';
 
 let io;
 const connectedUsers = new Map();
 
 function sanitizeLocation(payload) {
-  const latitude = Number(payload?.latitude);
-  const longitude = Number(payload?.longitude);
-  const accuracy = payload?.accuracy === null || payload?.accuracy === undefined ? null : Number(payload.accuracy);
+  const coords = payload?.location || payload;
+  const latitude = Number(coords?.latitude);
+  const longitude = Number(coords?.longitude);
+  const accuracy = coords?.accuracy === null || coords?.accuracy === undefined ? null : Number(coords.accuracy);
 
   if (
     !Number.isFinite(latitude) ||
@@ -31,6 +33,7 @@ function sanitizeLocation(payload) {
     updatedAt: new Date(),
   };
 }
+
 
 function getConnectedUsersSnapshot() {
   return Array.from(connectedUsers.values()).map((user) => ({
@@ -154,6 +157,16 @@ export function initializeSocketServer(httpServer) {
         socket.to(userRoom).emit('location-update', eventPayload);
         io.to(guardianRoom).emit('location-update', eventPayload);
         ack?.({ success: true, location });
+
+        // Invoke Safety Agent update loop asynchronously
+        const agentPayload = {
+          location,
+          battery: payload?.battery || null,
+          activeRoute: payload?.activeRoute || null,
+        };
+        safetyAgent.onUserUpdate(userId, updatedUser, agentPayload).catch((err) => {
+          console.error('SafetyAgent error:', err.message);
+        });
       } catch (error) {
         console.error('Live location save failed:', error.message);
         ack?.({ success: false, message: error.message || 'Unable to save live location' });
@@ -181,12 +194,17 @@ export function initializeSocketServer(httpServer) {
     socket.on('disconnect', (reason) => {
       connectedUsers.delete(socket.id);
       io.emit('connected-users', getConnectedUsersSnapshot());
+      
+      // Clean Safety Agent memory
+      safetyAgent.onUserDisconnect(userId);
+
       socket.to(guardianRoom).emit('user-disconnected', {
         userId,
         reason,
         disconnectedAt: new Date().toISOString(),
       });
     });
+
   });
 
   return io;
