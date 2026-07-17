@@ -1,12 +1,33 @@
+# Dependency directories
 node_modules/
+
+# Production builds
 dist/
 build/
+out/
+
+# Environment files
 .env
 .env.local
 .env.*.local
+*.env
+
+# IDE / System files
+.DS_Store
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-.DS_Store
+lerna-debug.log*
+
+# Coverage directory
 coverage/

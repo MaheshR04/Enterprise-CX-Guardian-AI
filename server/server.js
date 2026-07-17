@@ -1,26 +1,31 @@
-import http from 'node:http';
-import app from './app.js';
-import { connectDatabase } from './config/db.js';
-import { env } from './config/env.js';
-import { initializeSocketServer } from './sockets/index.js';
-import { registerAllTools } from './agents/ToolRegistry.js';
+const http = require('http');
+const app = require('./app');
+const { Server } = require('socket.io');
 
+const PORT = process.env.PORT || 5000;
+
+// Create HTTP server
 const server = http.createServer(app);
 
-initializeSocketServer(server);
+// Initialize Socket.IO with CORS
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
 
-async function startServer() {
-  await connectDatabase();
+// Socket connection handler
+io.on('connection', (socket) => {
+  console.log(`User connected: ${socket.id}`);
 
-  // Register AI Agent tools
-  registerAllTools();
-
-  server.listen(env.PORT, () => {
-    console.log(`GuardianPath API running on port ${env.PORT}`);
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.id}`);
   });
-}
+});
 
-startServer().catch((error) => {
-  console.error('Failed to start server:', error.message);
-  process.exit(1);
+// Start Server
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
