@@ -1,11 +1,11 @@
-const express = require('express');
-const healthRoutes = require('./health.routes');
-const authRoutes = require('./auth.routes');
-const customerRoutes = require('./customer.routes');
-const ticketRoutes = require('./ticket.routes');
-const dashboardRoutes = require('./dashboard.routes');
-const analyticsRoutes = require('./analytics.routes');
-const chatRoutes = require('./chat.routes');
+import express from 'express';
+import healthRoutes from './health.routes.js';
+import authRoutes from './auth.routes.js';
+import customerRoutes from './customer.routes.js';
+import ticketRoutes from './ticket.routes.js';
+import dashboardRoutes from './dashboard.routes.js';
+import analyticsRoutes from './analytics.routes.js';
+import chatRoutes from './chat.routes.js';
 
 const router = express.Router();
 
@@ -18,4 +18,4 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/chat', chatRoutes);
 
-module.exports = router;
+export default router;

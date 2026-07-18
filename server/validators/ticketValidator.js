@@ -1,13 +1,13 @@
-const { body } = require('express-validator');
-const validateFields = require('./validateFields');
-const { constants } = require('../config');
+import { body } from 'express-validator';
+import validateFields from './validateFields.js';
+import { constants } from '../config/index.js';
 
 const priorities = Object.values(constants.TICKET_PRIORITY);
 
 /**
  * Reusable ticket validation schema rules template.
  */
-const validateTicket = [
+export const validateTicket = [
   body('customer')
     .notEmpty()
     .withMessage('Customer association is required')
@@ -27,7 +27,3 @@ const validateTicket = [
 
   validateFields
 ];
-
-module.exports = {
-  validateTicket
-};

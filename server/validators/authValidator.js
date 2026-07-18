@@ -1,10 +1,10 @@
-const { body } = require('express-validator');
-const validateFields = require('./validateFields');
+import { body } from 'express-validator';
+import validateFields from './validateFields.js';
 
 /**
  * Reusable user authentication validation rules templates.
  */
-const validateLogin = [
+export const validateLogin = [
   body('email')
     .notEmpty().withMessage('Email address is required')
     .isEmail().withMessage('Must be a valid email format')
@@ -16,7 +16,7 @@ const validateLogin = [
   validateFields
 ];
 
-const validateRegister = [
+export const validateRegister = [
   body('name')
     .notEmpty().withMessage('User name is required')
     .isLength({ min: 2 }).withMessage('Name must be at least 2 characters long'),
@@ -32,8 +32,3 @@ const validateRegister = [
 
   validateFields
 ];
-
-module.exports = {
-  validateLogin,
-  validateRegister
-};

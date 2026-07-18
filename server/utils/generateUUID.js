@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+import crypto from 'crypto';
 
 /**
  * Generate cryptographically secure UUID v4 strings.
@@ -7,4 +7,4 @@ const generateUUID = () => {
   return crypto.randomUUID();
 };
 
-module.exports = generateUUID;
+export default generateUUID;

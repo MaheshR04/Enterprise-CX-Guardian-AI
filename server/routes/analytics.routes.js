@@ -1,18 +1,9 @@
-const express = require('express');
+import express from 'express';
+import * as analyticsController from '../controllers/analyticsController.js';
+
 const router = express.Router();
 
-router.get('/performance', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Analytics Performance API Working"
-  });
-});
+router.get('/performance', analyticsController.getPerformanceMetrics);
+router.get('/sentiment', analyticsController.getSentimentAnalysis);
 
-router.get('/sentiment', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Analytics Sentiment API Working"
-  });
-});
-
-module.exports = router;
+export default router;

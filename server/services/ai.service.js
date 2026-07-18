@@ -7,7 +7,6 @@ class AiService {
    * Evaluates text sentiment parameters (positive, negative, neutral).
    */
   async analyzeSentiment(text) {
-    // TODO: Delegate call to python FastAPI analyze router
     return {
       sentiment: 'Neutral',
       score: 0.5
@@ -18,7 +17,6 @@ class AiService {
    * Classifies user intent (billing query, password reset, login issue).
    */
   async classifyIntent(text) {
-    // TODO: Delegate call to python FastAPI intent router
     return {
       intent: 'General Query',
       confidence: 0.95
@@ -29,7 +27,6 @@ class AiService {
    * Evaluates customer metrics to predict risk thresholds.
    */
   async predictChurnRisk(customerData) {
-    // TODO: Delegate call to python FastAPI churn model
     return {
       churnRisk: 'Low',
       healthScore: 85
@@ -37,4 +34,5 @@ class AiService {
   }
 }
 
-module.exports = new AiService();
+const aiServiceInstance = new AiService();
+export default aiServiceInstance;

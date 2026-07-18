@@ -1,13 +1,13 @@
 /**
- * Standard Success Response class template.
+ * Standard Success Response class template matching unified API response schema.
  */
 class ApiResponse {
   constructor(statusCode, data, message = 'Success') {
-    this.statusCode = statusCode;
-    this.data = data;
-    this.message = message;
     this.success = statusCode < 400;
+    this.message = message;
+    this.data = data || null;
+    this.errors = null;
   }
 }
 
-module.exports = ApiResponse;
+export default ApiResponse;

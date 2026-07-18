@@ -1,9 +1,6 @@
-const env = require('./env');
-const constants = require('./constants');
-const logger = require('./logger');
+import * as env from './env.js';
+import * as constants from './constants.js';
+import logger from './logger.js';
 
-module.exports = {
-  ...env,
-  constants,
-  logger
-};
+export const { PORT, NODE_ENV, MONGO_URI, JWT_SECRET, PYTHON_AI_URL, CLIENT_URL } = env;
+export { constants, logger };

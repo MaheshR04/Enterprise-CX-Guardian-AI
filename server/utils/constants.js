@@ -1,8 +1,8 @@
-const config = require('../config');
+import { constants } from '../config/index.js';
 
 /**
  * Re-export constants from central configuration
  */
-module.exports = {
-  ...config.constants
+export default {
+  ...constants
 };

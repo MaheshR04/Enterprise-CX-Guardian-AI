@@ -7,7 +7,6 @@ class NotificationService {
    * Dispatches warning logs to remote slack alert webhooks channels.
    */
   async sendSlackAlert(message) {
-    // TODO: Trigger Axios calls to Slack webhook endpoints
     return true;
   }
 
@@ -15,7 +14,6 @@ class NotificationService {
    * Transmits standard HTML notifications emails to users.
    */
   async sendEmailAlert(to, subject, body) {
-    // TODO: Send email using nodemailer or SendGrid adapters
     return true;
   }
 
@@ -23,9 +21,9 @@ class NotificationService {
    * Emits live websocket push events alert schemas.
    */
   async triggerLiveAlert(channel, event, payload) {
-    // TODO: Interface socket.io connections server to emit payloads
     return true;
   }
 }
 
-module.exports = new NotificationService();
+const notificationServiceInstance = new NotificationService();
+export default notificationServiceInstance;

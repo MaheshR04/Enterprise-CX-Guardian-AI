@@ -1,18 +1,9 @@
-const express = require('express');
+import express from 'express';
+import * as chatController from '../controllers/chatController.js';
+
 const router = express.Router();
 
-router.get('/history', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Chat History API Working"
-  });
-});
+router.get('/history', chatController.getChatHistory);
+router.post('/send', chatController.sendChatMessage);
 
-router.post('/send', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Chat Message Send API Working"
-  });
-});
-
-module.exports = router;
+export default router;

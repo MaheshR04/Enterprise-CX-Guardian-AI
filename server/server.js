@@ -1,8 +1,8 @@
-const http = require('http');
-const app = require('./app');
-const { Server } = require('socket.io');
-const config = require('./config');
-const { connectDatabase, disconnectDatabase } = require('./database/connection');
+import http from 'http';
+import app from './app.js';
+import { Server } from 'socket.io';
+import * as config from './config/index.js';
+import { connectDatabase, disconnectDatabase } from './database/connection.js';
 
 // Connect Database
 connectDatabase();

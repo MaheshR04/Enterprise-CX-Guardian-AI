@@ -1,7 +1,7 @@
 /**
  * Utility to process request query pagination and format responses.
  */
-const getPaginationOptions = (query) => {
+export const getPaginationOptions = (query) => {
   const page = Math.max(1, parseInt(query.page, 10) || 1);
   const limit = Math.max(1, Math.min(100, parseInt(query.limit, 10) || 10)); // caps max limit at 100
   const skip = (page - 1) * limit;
@@ -9,7 +9,7 @@ const getPaginationOptions = (query) => {
   return { page, limit, skip };
 };
 
-const formatPaginationResponse = (data, totalCount, page, limit) => {
+export const formatPaginationResponse = (data, totalCount, page, limit) => {
   const totalPages = Math.ceil(totalCount / limit);
   
   return {
@@ -23,9 +23,4 @@ const formatPaginationResponse = (data, totalCount, page, limit) => {
       hasPrevPage: page > 1
     }
   };
-};
-
-module.exports = {
-  getPaginationOptions,
-  formatPaginationResponse
 };

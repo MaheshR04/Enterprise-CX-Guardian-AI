@@ -1,21 +1,22 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const compression = require('compression');
-const morgan = require('morgan');
-const cookieParser = require('cookie-parser');
-const requestLogger = require('./middleware/requestLogger');
-const errorHandler = require('./middleware/errorHandler');
-const notFound = require('./middleware/notFound');
-const responseFormatter = require('./middleware/responseFormatter');
-const apiRouter = require('./routes');
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
+import requestLogger from './middleware/requestLogger.js';
+import errorHandler from './middleware/errorHandler.js';
+import notFound from './middleware/notFound.js';
+import responseFormatter from './middleware/responseFormatter.js';
+import apiRouter from './routes/index.js';
+import { CLIENT_URL } from './config/index.js';
 
 const app = express();
 
 // Security Middlewares
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: CLIENT_URL,
   credentials: true
 }));
 
@@ -30,15 +31,6 @@ app.use(responseFormatter);
 app.use(morgan('dev'));
 app.use(requestLogger);
 
-// Health Check Route
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    message: 'Enterprise CX Guardian AI Server is healthy.',
-    timestamp: new Date()
-  });
-});
-
 // Route Gateway Dispatcher
 app.use('/api/v1', apiRouter);
 
@@ -48,4 +40,4 @@ app.use(notFound);
 // Centralized Error Handler
 app.use(errorHandler);
 
-module.exports = app;
+export default app;

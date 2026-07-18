@@ -1,10 +1,10 @@
-const { JWT_SECRET } = require('../config');
+import { JWT_SECRET } from '../config/index.js';
 
 /**
  * Reusable Authentication Guard template.
  * Do NOT implement JWT logic yet (stub placeholder).
  */
-const protect = async (req, res, next) => {
+export const protect = async (req, res, next) => {
   let token;
 
   // Check for authorization header Bearer token
@@ -43,7 +43,7 @@ const protect = async (req, res, next) => {
 /**
  * Restricts access to specific roles (e.g., Admin, Agent).
  */
-const authorizeRoles = (...roles) => {
+export const authorizeRoles = (...roles) => {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({
@@ -53,9 +53,4 @@ const authorizeRoles = (...roles) => {
     }
     next();
   };
-};
-
-module.exports = {
-  protect,
-  authorizeRoles
 };

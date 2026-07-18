@@ -1,11 +1,8 @@
-const express = require('express');
+import express from 'express';
+import * as dashboardController from '../controllers/dashboardController.js';
+
 const router = express.Router();
 
-router.get('/summary', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Dashboard Summary API Working"
-  });
-});
+router.get('/summary', dashboardController.getDashboardSummary);
 
-module.exports = router;
+export default router;

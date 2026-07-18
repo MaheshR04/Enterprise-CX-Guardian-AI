@@ -1,4 +1,4 @@
-const { logger } = require('../config');
+import { logger } from '../config/index.js';
 
 /**
  * HTTP requests logging middleware utilizing Winston loggers.
@@ -14,4 +14,4 @@ const requestLogger = (req, res, next) => {
   next();
 };
 
-module.exports = requestLogger;
+export default requestLogger;

@@ -1,28 +1,29 @@
 /**
- * Middleware to bind helper formatters for standard JSON API responses.
+ * Middleware binding helpers for standardized success response formats.
  */
 const responseFormatter = (req, res, next) => {
   
   // 200 OK success reply
-  res.ok = (data, message = 'Success') => {
+  res.ok = (data = {}, message = 'Success') => {
     res.status(200).json({
       success: true,
       message,
-      count: Array.isArray(data) ? data.length : undefined,
-      data
+      data,
+      errors: null
     });
   };
 
   // 201 Created success reply
-  res.created = (data, message = 'Resource Created Successfully') => {
+  res.created = (data = {}, message = 'Resource Created Successfully') => {
     res.status(201).json({
       success: true,
       message,
-      data
+      data,
+      errors: null
     });
   };
 
   next();
 };
 
-module.exports = responseFormatter;
+export default responseFormatter;

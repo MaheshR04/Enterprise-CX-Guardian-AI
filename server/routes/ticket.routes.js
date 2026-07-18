@@ -1,6 +1,6 @@
-const express = require('express');
-const ticketController = require('../controllers/ticketController');
-const { validateTicket } = require('../validators/ticketValidator');
+import express from 'express';
+import * as ticketController from '../controllers/ticketController.js';
+import { validateTicket } from '../validators/ticketValidator.js';
 
 const router = express.Router();
 
@@ -13,4 +13,4 @@ router.route('/:id')
   .put(ticketController.updateTicket)
   .delete(ticketController.deleteTicket);
 
-module.exports = router;
+export default router;

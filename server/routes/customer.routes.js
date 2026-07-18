@@ -1,18 +1,9 @@
-const express = require('express');
+import express from 'express';
+import * as customerController from '../controllers/customerController.js';
+
 const router = express.Router();
 
-router.get('/', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Customer API Working"
-  });
-});
+router.get('/', customerController.getCustomers);
+router.get('/:id', customerController.getCustomerById);
 
-router.get('/:id', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: `Customer details for id ${req.params.id} Working`
-  });
-});
-
-module.exports = router;
+export default router;

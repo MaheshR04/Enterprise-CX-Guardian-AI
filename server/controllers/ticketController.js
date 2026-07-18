@@ -1,4 +1,5 @@
-const asyncHandler = require('../utils/asyncHandler');
+import asyncHandler from '../utils/asyncHandler.js';
+import ApiError from '../utils/ApiError.js';
 
 // Mock tickets cache data
 const mockTickets = [
@@ -10,37 +11,27 @@ const mockTickets = [
  * @desc Get all support tickets
  * @route GET /api/v1/tickets
  */
-exports.getTickets = asyncHandler(async (req, res, next) => {
-  res.status(200).json({
-    success: true,
-    count: mockTickets.length,
-    data: mockTickets
-  });
+export const getTickets = asyncHandler(async (req, res, next) => {
+  res.ok(mockTickets, "Tickets retrieved successfully");
 });
 
 /**
  * @desc Get single ticket
  * @route GET /api/v1/tickets/:id
  */
-exports.getTicketById = asyncHandler(async (req, res, next) => {
+export const getTicketById = asyncHandler(async (req, res, next) => {
   const ticket = mockTickets.find(t => t.id === req.params.id);
   if (!ticket) {
-    return res.status(404).json({
-      success: false,
-      message: `Ticket not found with id of ${req.params.id}`
-    });
+    throw new ApiError(404, `Ticket not found with id of ${req.params.id}`);
   }
-  res.status(200).json({
-    success: true,
-    data: ticket
-  });
+  res.ok(ticket, "Ticket details retrieved successfully");
 });
 
 /**
  * @desc Create new ticket
  * @route POST /api/v1/tickets
  */
-exports.createTicket = asyncHandler(async (req, res, next) => {
+export const createTicket = asyncHandler(async (req, res, next) => {
   const newTicket = {
     id: `CX-${Math.floor(Math.random() * 9000) + 1000}`,
     customer: req.body.customer || 'Unknown Customer',
@@ -49,30 +40,21 @@ exports.createTicket = asyncHandler(async (req, res, next) => {
     status: 'Open'
   };
 
-  res.status(201).json({
-    success: true,
-    data: newTicket
-  });
+  res.created(newTicket, "Ticket created successfully");
 });
 
 /**
  * @desc Update support ticket
  * @route PUT /api/v1/tickets/:id
  */
-exports.updateTicket = asyncHandler(async (req, res, next) => {
-  res.status(200).json({
-    success: true,
-    message: `Ticket ${req.params.id} updated successfully`
-  });
+export const updateTicket = asyncHandler(async (req, res, next) => {
+  res.ok({}, `Ticket ${req.params.id} updated successfully`);
 });
 
 /**
  * @desc Delete support ticket
  * @route DELETE /api/v1/tickets/:id
  */
-exports.deleteTicket = asyncHandler(async (req, res, next) => {
-  res.status(200).json({
-    success: true,
-    message: `Ticket ${req.params.id} deleted successfully`
-  });
+export const deleteTicket = asyncHandler(async (req, res, next) => {
+  res.ok({}, `Ticket ${req.params.id} deleted successfully`);
 });

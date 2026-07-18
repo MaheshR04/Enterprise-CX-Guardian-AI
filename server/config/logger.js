@@ -1,6 +1,10 @@
-const winston = require('winston');
-const path = require('path');
-const env = require('./env');
+import winston from 'winston';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import * as env from './env.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const levels = {
   error: 0,
@@ -25,7 +29,7 @@ const getLogLevel = () => {
   return 'info';
 };
 
-// Standarized file logging format
+// Standardized file logging format
 const fileLogFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
   winston.format.errors({ stack: true }),
@@ -43,20 +47,20 @@ const consoleLogFormat = winston.format.combine(
 );
 
 const transports = [
-  // 1. Console transport
+  // Console transport
   new winston.transports.Console({
     level: getLogLevel(),
     format: consoleLogFormat
   }),
   
-  // 2. Error File transport (logs/error.log)
+  // Error File transport (logs/error.log)
   new winston.transports.File({
     filename: path.join(__dirname, '../logs/error.log'),
     level: 'error',
     format: fileLogFormat
   }),
   
-  // 3. Combined File transport (logs/combined.log)
+  // Combined File transport (logs/combined.log)
   new winston.transports.File({
     filename: path.join(__dirname, '../logs/combined.log'),
     level: 'debug',
@@ -70,4 +74,4 @@ const logger = winston.createLogger({
   transports
 });
 
-module.exports = logger;
+export default logger;

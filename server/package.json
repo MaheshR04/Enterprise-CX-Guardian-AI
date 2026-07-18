@@ -1,6 +1,7 @@
 {
   "name": "server",
   "version": "1.0.0",
+  "type": "module",
   "description": "Express Backend for Enterprise CX Guardian AI",
   "main": "server.js",
   "scripts": {

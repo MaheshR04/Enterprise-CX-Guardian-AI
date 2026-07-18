@@ -1,18 +1,9 @@
-const express = require('express');
+import express from 'express';
+import * as authController from '../controllers/authController.js';
+
 const router = express.Router();
 
-router.post('/login', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Auth Login API Working"
-  });
-});
+router.post('/login', authController.login);
+router.post('/register', authController.register);
 
-router.post('/register', (req, res) => {
-  res.status(201).json({
-    success: true,
-    message: "Auth Register API Working"
-  });
-});
-
-module.exports = router;
+export default router;

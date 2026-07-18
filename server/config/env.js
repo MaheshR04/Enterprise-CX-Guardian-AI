@@ -1,5 +1,9 @@
-const dotenv = require('dotenv');
-const path = require('path');
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -22,11 +26,9 @@ if (missingEnv.length > 0) {
   }
 }
 
-module.exports = {
-  PORT: process.env.PORT || 5000,
-  NODE_ENV: process.env.NODE_ENV || 'development',
-  MONGO_URI: process.env.MONGO_URI || 'mongodb://localhost:27017/cx_guardian_db',
-  JWT_SECRET: process.env.JWT_SECRET || 'supersecretjwtkeychangeinproduction',
-  PYTHON_AI_URL: process.env.PYTHON_AI_URL || 'http://localhost:8000',
-  CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:5173'
-};
+export const PORT = process.env.PORT || 5000;
+export const NODE_ENV = process.env.NODE_ENV || 'development';
+export const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/cx_guardian_db';
+export const JWT_SECRET = process.env.JWT_SECRET || 'supersecretjwtkeychangeinproduction';
+export const PYTHON_AI_URL = process.env.PYTHON_AI_URL || 'http://localhost:8000';
+export const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';

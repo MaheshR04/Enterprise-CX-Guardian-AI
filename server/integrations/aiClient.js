@@ -1,11 +1,11 @@
-const axios = require('axios');
-const config = require('../config');
+import axios from 'axios';
+import { PYTHON_AI_URL } from '../config/index.js';
 
 /**
  * Configure Axios Client instance for communicating with PYTHON_AI_URL service.
  */
-const aiClient = axios.create({
-  baseURL: config.PYTHON_AI_URL,
+export const aiClient = axios.create({
+  baseURL: PYTHON_AI_URL,
   timeout: 5000, // 5 seconds timeout limit
   headers: {
     'Content-Type': 'application/json',
@@ -48,7 +48,7 @@ aiClient.interceptors.response.use(
 /**
  * Verifies if the FastAPI AI microservice is responsive.
  */
-const checkAiServiceHealth = async () => {
+export const checkAiServiceHealth = async () => {
   try {
     const response = await aiClient.get('/');
     return {
@@ -62,9 +62,4 @@ const checkAiServiceHealth = async () => {
       error: error.message
     };
   }
-};
-
-module.exports = {
-  aiClient,
-  checkAiServiceHealth
 };
