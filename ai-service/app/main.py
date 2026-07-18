@@ -3,8 +3,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.config import settings
-from app.utils.logger import logger, log_error
+from app.core.config import settings
+from app.core.logger import logger
+from app.utils.logger import log_error
 from app.utils.response import error_response
 from app.utils.exceptions import BaseAppException
 from app.middleware.logging_middleware import RequestLoggingMiddleware

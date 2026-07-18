@@ -20,3 +20,21 @@ class NotFoundException(BaseAppException):
     """Exception raised when a requested resource is not found."""
     def __init__(self, message: str = "Requested resource not found", detail: str = None):
         super().__init__(message=message, status_code=404, detail=detail)
+
+class ConversationNotFoundException(BaseAppException):
+    """Exception raised when a requested conversation ID does not exist."""
+    def __init__(self, conversation_id: str):
+        super().__init__(
+            message="Conversation not found",
+            status_code=404,
+            detail=f"Conversation ID '{conversation_id}' does not exist or has expired."
+        )
+
+class InvalidConversationIdException(BaseAppException):
+    """Exception raised when a conversation ID string is malformed or invalid."""
+    def __init__(self, detail: str = "Invalid Conversation ID format"):
+        super().__init__(
+            message="Invalid Conversation ID",
+            status_code=400,
+            detail=detail
+        )

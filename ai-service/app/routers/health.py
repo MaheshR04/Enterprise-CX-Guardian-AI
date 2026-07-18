@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status
 import time
 from datetime import datetime
-from app.config import settings, Settings
+from app.core.config import settings, Settings
 from app.schemas.payload import HealthResponse, ErrorResponse
 
 router = APIRouter()
@@ -45,9 +45,9 @@ async def get_health(cfg: Settings = Depends(get_settings)) -> HealthResponse:
     uptime_seconds = int(time.time() - START_TIME)
     return HealthResponse(
         status="healthy",
-        service=cfg.PROJECT_NAME,
+        service="Enterprise CX Guardian AI",
         version=cfg.VERSION,
-        python="running",
+        uptime=f"{uptime_seconds}s",
         timestamp=datetime.utcnow().isoformat(),
-        uptime=f"{uptime_seconds}s"
+        python="running"
     )

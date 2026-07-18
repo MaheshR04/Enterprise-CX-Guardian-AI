@@ -4,22 +4,25 @@ import aiService from '../services/ai.service.js';
 
 /**
  * @desc Process chat message and receive AI response
- * @route POST /api/v1/chat/send
+ * @route POST /api/v1/chat
  * @access Public / Authenticated
  */
 export const sendChatMessage = asyncHandler(async (req, res, next) => {
-  const { message, conversation_id, customer_id } = req.body;
+  const { message, conversationId, conversation_id, customerId, customer_id } = req.body;
 
-  // 1. Input Validation
+  // 1. Input Validation Fallback Check
   if (!message || typeof message !== 'string' || !message.trim()) {
     throw new ApiError(400, 'Message content is required and cannot be empty.');
   }
 
+  const selectedConversationId = conversationId || conversation_id || 'conv_default_001';
+  const selectedCustomerId = customerId || customer_id || 'cust_1001';
+
   // 2. Call ai.service.js (Zero Axios calls directly in controller)
   const aiResult = await aiService.chat({
     message: message.trim(),
-    conversation_id: conversation_id || 'conv_default_001',
-    customer_id: customer_id || 'cust_1001'
+    conversation_id: selectedConversationId,
+    customer_id: selectedCustomerId
   });
 
   // 3. Return Standardized Response
@@ -31,6 +34,26 @@ export const sendChatMessage = asyncHandler(async (req, res, next) => {
     success: true,
     message: 'AI response processed successfully',
     data: aiResult,
+    errors: null
+  });
+});
+
+/**
+ * @desc Get AI chat service status
+ * @route GET /api/v1/chat/health
+ * @access Public / Authenticated
+ */
+export const getChatHealth = asyncHandler(async (req, res, next) => {
+  const healthData = await aiService.health();
+
+  if (res.ok) {
+    return res.ok(healthData, 'Chat AI service status retrieved successfully');
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: 'Chat AI service status retrieved successfully',
+    data: healthData,
     errors: null
   });
 });
@@ -70,5 +93,6 @@ export const getChatHistory = asyncHandler(async (req, res, next) => {
 
 export default {
   sendChatMessage,
+  getChatHealth,
   getChatHistory
 };

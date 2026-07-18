@@ -2,13 +2,13 @@ import time
 import groq
 from groq import Groq
 import httpx
-from app.config import settings
-from app.utils.logger import logger, log_ai_call
+from app.core.config import settings
+from app.core.logger import logger, log_ai_call
 
-class GroqService:
+class GroqClient:
     """
-    Enterprise Groq LLM Execution Engine.
-    Configures API client connections, timeouts, retries, and reusable completion generators.
+    Groq LLM Connection Client Provider.
+    Configures API client connections, timeouts, retries, and completion execution.
     """
     def __init__(self):
         self.model_name = settings.MODEL_NAME
@@ -31,7 +31,7 @@ class GroqService:
             timeout=15.0,
             http_client=self.httpx_client
         )
-        logger.info(f"[Groq Service] Initialized Groq Client. Model: {self.model_name} | Max Retries: 3 | Timeout: 15.0s")
+        logger.info(f"[Groq Client] Initialized Groq Client. Model: {self.model_name} | Max Retries: 3 | Timeout: 15.0s")
 
     async def generate(
         self,
@@ -43,19 +43,6 @@ class GroqService:
         """
         Exposes the primary generate() entrypoint for Groq LLM completions.
         """
-        return await self.generate_completion(prompt, system_prompt, temperature, max_tokens)
-
-    async def generate_completion(
-        self,
-        prompt: str,
-        system_prompt: str = None,
-        temperature: float = None,
-        max_tokens: int = None
-    ) -> dict:
-        """
-        Executes an asynchronous chat completion request via Groq SDK.
-        Includes execution time measuring, token logging, and detailed exception handling.
-        """
         start_time = time.time()
         temp = temperature if temperature is not None else self.temperature
         tokens_limit = max_tokens if max_tokens is not None else self.max_tokens
@@ -65,11 +52,9 @@ class GroqService:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        # 1. Log Groq Request
         logger.info(f"[Groq Request] Sending completion request to model '{self.model_name}' (prompt length: {len(prompt)})")
 
         if not self.has_key:
-            # Fallback mode when GROQ_API_KEY is not configured
             latency_ms = (time.time() - start_time) * 1000
             logger.info(f"[Groq Fallback] Returning simulated response for prompt length {len(prompt)} ({latency_ms:.2f}ms)")
             return {
@@ -94,7 +79,6 @@ class GroqService:
             prompt_tokens = response.usage.prompt_tokens if response.usage else 0
             completion_tokens = response.usage.completion_tokens if response.usage else 0
 
-            # 2. Log Groq Response & Execution Time
             logger.info(f"[Groq Response] Received response choices: {len(response.choices)} ({latency_ms:.2f}ms)")
             log_ai_call(self.model_name, prompt_tokens, completion_tokens, latency_ms)
 
@@ -164,13 +148,4 @@ class GroqService:
                 "error": str(error)
             }
 
-    def get_model_info(self) -> dict:
-        """Returns model configuration metadata."""
-        return {
-            "model_name": self.model_name,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "status": "configured" if self.has_key else "fallback_mode"
-        }
-
-groq_service = GroqService()
+groq_client = GroqClient()

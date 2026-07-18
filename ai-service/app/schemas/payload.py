@@ -18,15 +18,43 @@ class HealthResponse(BaseModel):
     status: str = Field(..., example="healthy")
     service: str = Field(..., example="Enterprise CX Guardian AI")
     version: str = Field(..., example="1.0.0")
-    python: str = Field(..., example="running")
-    timestamp: str = Field(..., example="2026-07-18T12:00:00Z")
     uptime: str = Field(..., example="120s")
+    timestamp: str = Field(..., example="2026-07-18T12:00:00Z")
+    python: str = Field(..., example="running")
 
 # 4. Chat Schemas
 class ChatRequest(BaseModel):
-    message: Optional[str] = Field(default="Hello", example="I was charged twice for my subscription this month.")
-    conversation_id: Optional[str] = Field(default="conv_default_001", example="conv_default_001")
-    customer_id: Optional[str] = Field(default="cust_1001", example="cust_1001")
+    message: Optional[str] = Field(default="Hello AI", example="Hello AI")
+    conversationId: Optional[str] = Field(default="conv_default_001", example="conv_default_001")
+    conversation_id: Optional[str] = Field(default=None, example="conv_default_001")
+    temperature: Optional[float] = Field(default=None, example=0.2)
+
+class TokenUsage(BaseModel):
+    prompt_tokens: Optional[int] = Field(default=0, example=10)
+    completion_tokens: Optional[int] = Field(default=0, example=12)
+    total_tokens: Optional[int] = Field(default=0, example=22)
+
+class ChatResponseData(BaseModel):
+    reply: str = Field(..., example="Hello from Groq LLaMA-3")
+    model: str = Field(..., example="llama3-70b-8192")
+    usage: Optional[TokenUsage] = Field(default=None)
+    processingTime: str = Field(..., example="15ms")
+
+class ChatResponsePayload(BaseModel):
+    success: bool = Field(True, example=True)
+    message: str = Field("AI response generated successfully", example="AI response generated successfully")
+    data: ChatResponseData
+
+class ChatConnectivityData(BaseModel):
+    reply: str = Field("Hello from FastAPI", example="Hello from FastAPI")
+    service: str = Field("Python AI Service", example="Python AI Service")
+    version: str = Field("1.0.0", example="1.0.0")
+    processingTime: str = Field("15ms", example="15ms")
+
+class ChatConnectivityResponse(BaseModel):
+    success: bool = Field(True, example=True)
+    message: str = Field("AI service connected successfully", example="AI service connected successfully")
+    data: ChatConnectivityData
 
 class DummyChatResponse(BaseModel):
     success: bool = Field(True, example=True)
@@ -34,10 +62,10 @@ class DummyChatResponse(BaseModel):
     response: str = Field("Hello from AI Service", example="Hello from AI Service")
 
 class ChatResponse(BaseModel):
-    response: str = Field(..., example="I apologize for the double charge. I have processed a refund of $49.99.")
-    conversation_id: str = Field(..., example="conv_default_001")
-    intent_detected: str = Field(..., example="Billing & Refunds")
-    confidence: float = Field(..., example=0.98)
+    reply: str = Field(..., example="Hello from Groq LLaMA-3")
+    model: str = Field(..., example="llama3-70b-8192")
+    usage: Optional[TokenUsage] = Field(default=None)
+    processingTime: str = Field(..., example="15ms")
 
 # 5. Reasoning Schemas
 class ReasoningRequest(BaseModel):

@@ -1,14 +1,22 @@
 import { logger } from '../config/index.js';
 
 /**
- * HTTP requests logging middleware utilizing Winston loggers.
+ * Incoming HTTP request logging middleware utilizing existing Winston logger.
  */
 const requestLogger = (req, res, next) => {
-  const start = Date.now();
+  const startTime = Date.now();
+  
+  // 1. Log incoming request
+  if (logger && logger.info) {
+    logger.info(`[Incoming Request] ${req.method} ${req.originalUrl} - IP: ${req.ip || '::1'}`);
+  }
 
   res.on('finish', () => {
-    const duration = Date.now() - start;
-    logger.info(`${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms (IP: ${req.ip})`);
+    const durationMs = Date.now() - startTime;
+    // 2. Log execution time and response completion
+    if (logger && logger.info) {
+      logger.info(`[Incoming Request Complete] ${req.method} ${req.originalUrl} status:${res.statusCode} (${durationMs}ms)`);
+    }
   });
 
   next();
