@@ -31,4 +31,6 @@ export const NODE_ENV = process.env.NODE_ENV || 'development';
 export const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/cx_guardian_db';
 export const JWT_SECRET = process.env.JWT_SECRET || 'supersecretjwtkeychangeinproduction';
 export const PYTHON_AI_URL = process.env.PYTHON_AI_URL || 'http://localhost:8000';
+export const AI_TIMEOUT = parseInt(process.env.AI_TIMEOUT || '30000', 10);
+export const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3', 10);
 export const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
