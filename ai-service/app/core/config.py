@@ -22,6 +22,14 @@ class Settings:
     MESSAGE_COLLECTION: str = os.getenv("MESSAGE_COLLECTION", "messages")
     PROMPT_LOG_COLLECTION: str = os.getenv("PROMPT_LOG_COLLECTION", "prompt_logs")
     AI_USAGE_COLLECTION: str = os.getenv("AI_USAGE_COLLECTION", "ai_usage")
+    USER_COLLECTION: str = os.getenv("USER_COLLECTION", "users")
+    REFRESH_TOKEN_COLLECTION: str = os.getenv("REFRESH_TOKEN_COLLECTION", "refresh_tokens")
+
+    # JWT & Authentication Parameters
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
     
     # AI & Service Parameters
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from typing import Optional
+from app.middleware.auth import get_current_user
+from app.schemas.auth import UserProfile
 from app.schemas.chat_request import ChatRequest
 from app.schemas.chat_response import ChatResponsePayload, ChatResponseData, TokenUsage
 from app.schemas.payload import ErrorResponse
@@ -147,6 +149,7 @@ def get_ai_service() -> AIServiceManager:
 )
 async def process_chat(
     payload: Optional[ChatRequest] = None,
+    current_user: UserProfile = Depends(get_current_user),
     service: AIServiceManager = Depends(get_ai_service)
 ) -> ChatResponsePayload:
     """
@@ -181,7 +184,8 @@ async def process_chat(
     result = await service.process_message(
         message=msg,
         conversation_id=conv_id,
-        temperature=temp
+        temperature=temp,
+        user_id=current_user.userId
     )
 
     # Build token usage model

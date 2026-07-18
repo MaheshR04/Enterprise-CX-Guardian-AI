@@ -93,7 +93,7 @@ class DatabaseConnection:
             )
             logger.info(
                 f"[DB Connect] Collections registered: "
-                f"conversations | messages | prompt_logs | ai_usage"
+                f"conversations | messages | prompt_logs | ai_usage | users"
             )
             await cls.ensure_indexes()
 
@@ -222,6 +222,14 @@ class DatabaseConnection:
                 ([("usage_id", 1)], {"unique": True, "name": "uq_usage_id"}),
                 ([("conversation_id", 1), ("timestamp", -1)], {"name": "idx_usage_conversation_timestamp"}),
                 ([("model", 1), ("timestamp", -1)], {"name": "idx_usage_model_timestamp"}),
+            ],
+            settings.USER_COLLECTION: [
+                ([("userId", 1)], {"unique": True, "name": "uq_user_id"}),
+                ([("email", 1)], {"unique": True, "name": "uq_user_email"}),
+            ],
+            settings.REFRESH_TOKEN_COLLECTION: [
+                ([("tokenHash", 1)], {"unique": True, "name": "uq_refresh_token_hash"}),
+                ([("userId", 1), ("revoked", 1)], {"name": "idx_refresh_token_user_revoked"}),
             ],
         }
 

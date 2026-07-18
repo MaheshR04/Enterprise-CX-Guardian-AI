@@ -41,7 +41,8 @@ class AIServiceManager:
         self,
         message: str,
         conversation_id: str = None,
-        temperature: float = None
+        temperature: float = None,
+        user_id: str = None
     ) -> dict:
         """
         Executes the 10-step Chat Flow with MongoDB persistence.
@@ -64,8 +65,9 @@ class AIServiceManager:
 
         # ── Step 2: Create conversation if necessary ─────────────────
         exists = await self.conv_mgr.conversation_exists(cid)
+        metadata = {"userId": user_id} if user_id else None
         if not exists:
-            await self.conv_mgr.create_conversation(conversation_id=cid)
+            await self.conv_mgr.create_conversation(conversation_id=cid, metadata=metadata)
             logger.info(f"[Chat Flow] Step 2 — Created new conversation '{cid}' in MongoDB")
         else:
             logger.info(f"[Chat Flow] Step 2 — Conversation '{cid}' already exists")
@@ -74,7 +76,8 @@ class AIServiceManager:
         await self.conv_mgr.save_message(
             conversation_id=cid,
             role="user",
-            content=message
+            content=message,
+            metadata=metadata
         )
         logger.info(f"[Chat Flow] Step 3 — Saved user message to MongoDB")
 
@@ -114,7 +117,8 @@ class AIServiceManager:
         assistant_msg = await self.conv_mgr.save_message(
             conversation_id=cid,
             role="assistant",
-            content=reply_text
+            content=reply_text,
+            metadata=metadata
         )
         mid = assistant_msg.get("message_id", f"msg_{uuid.uuid4()}")
         logger.info(f"[Chat Flow] Step 8 — Saved assistant response '{mid}' to MongoDB")

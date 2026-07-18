@@ -37,6 +37,30 @@ class BaseAppException(Exception):
         super().__init__(self.message)
 
 
+class AuthenticationException(BaseAppException):
+    """Raised when authentication or authorization checks fail."""
+
+    def __init__(self, detail: str = "Authentication failed"):
+        super().__init__(
+            message="Authentication Failed",
+            status_code=401,
+            detail=detail,
+            error_code="AUTHENTICATION_FAILED"
+        )
+
+
+class DuplicateUserException(BaseAppException):
+    """Raised when a user attempts to register with an existing email."""
+
+    def __init__(self, email: str):
+        super().__init__(
+            message="User Already Exists",
+            status_code=409,
+            detail=f"A user with email '{email}' already exists.",
+            error_code="DUPLICATE_USER"
+        )
+
+
 # ══════════════════════════════════════════════════════════════════
 # 1. MongoDB Unavailable / Connection Errors
 # ══════════════════════════════════════════════════════════════════
