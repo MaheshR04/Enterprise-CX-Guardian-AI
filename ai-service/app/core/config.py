@@ -15,7 +15,12 @@ class Settings:
     
     # MongoDB Parameters
     MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-    DB_NAME: str = os.getenv("DB_NAME", "cx_guardian_db")
+    DATABASE_NAME: str = os.getenv("DATABASE_NAME", os.getenv("DB_NAME", "cx_guardian_db"))
+    DB_NAME: str = DATABASE_NAME
+    CONVERSATION_COLLECTION: str = os.getenv("CONVERSATION_COLLECTION", "conversations")
+    MESSAGE_COLLECTION: str = os.getenv("MESSAGE_COLLECTION", "messages")
+    PROMPT_LOG_COLLECTION: str = os.getenv("PROMPT_LOG_COLLECTION", "prompt_logs")
+    AI_USAGE_COLLECTION: str = os.getenv("AI_USAGE_COLLECTION", "ai_usage")
     
     # AI & Service Parameters
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")

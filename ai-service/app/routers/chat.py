@@ -10,32 +10,138 @@ from app.core.logger import logger
 
 router = APIRouter()
 
+
 def get_ai_service() -> AIServiceManager:
-    """Dependency injection provider for AI Service Manager."""
+    """Dependency injection provider for AIServiceManager."""
     return ai_service
 
+
+# ======================================================================
+# POST /api/v1/chat
+# ======================================================================
 @router.post(
     "/",
     response_model=ChatResponsePayload,
     status_code=status.HTTP_200_OK,
-    summary="Chat Microservice Endpoint",
-    description="Accepts chat input messages, loads system prompts, executes Groq LLM completions, and returns a standardized response.",
+    tags=["Chat"],
+    summary="Send a Chat Message",
+    description=(
+        "Accepts a user message and runs the **10-step MongoDB-backed Chat Flow**:\n\n"
+        "1. Receive request\n"
+        "2. Create conversation in MongoDB (if new)\n"
+        "3. Save user message → `MESSAGE_COLLECTION`\n"
+        "4. Load conversation history from MongoDB\n"
+        "5. Build prompt (system + history + message)\n"
+        "6. Send to Groq (`llama3-70b-8192`)\n"
+        "7. Receive AI response\n"
+        "8. Save assistant response → `MESSAGE_COLLECTION`\n"
+        "9. Save token usage → `AI_USAGE_COLLECTION` + prompt log → `PROMPT_LOG_COLLECTION`\n"
+        "10. Return standardised response\n"
+    ),
     responses={
         200: {
-            "model": ChatResponsePayload,
-            "description": "Response generated successfully."
+            "description": "AI response generated successfully.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "Response generated successfully",
+                        "data": {
+                            "conversationId":  "conv_7a8b9c0d-1234-5678-abcd-ef0123456789",
+                            "messageId":       "msg_8f1b2c3d-5678-1234-efab-cd0123456789",
+                            "reply":           "Hello! I'm your AI customer experience agent. How can I assist you today?",
+                            "processingTime":  "432ms",
+                            "model":           "llama3-70b-8192",
+                            "historyLength":   2,
+                            "usage": {
+                                "prompt_tokens":     120,
+                                "completion_tokens":  80,
+                                "total_tokens":      200
+                            }
+                        }
+                    }
+                }
+            }
         },
         400: {
-            "model": ErrorResponse,
-            "description": "Empty message or invalid conversation ID."
+            "description": "Empty message or invalid conversation ID.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success":    False,
+                        "message":   "Empty Message",
+                        "error":     "Message content cannot be blank or empty whitespace.",
+                        "error_code": "EMPTY_MESSAGE"
+                    }
+                }
+            }
         },
         422: {
-            "model": ErrorResponse,
-            "description": "Request validation failed."
+            "description": "Request body validation failed.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success":    False,
+                        "message":   "Request Validation Failed",
+                        "error":     "body → message: field required",
+                        "error_code": "VALIDATION_ERROR"
+                    }
+                }
+            }
         },
-        500: {
-            "model": ErrorResponse,
-            "description": "Internal server error."
+        503: {
+            "description": "MongoDB unavailable — operating in fallback mode.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success":    False,
+                        "message":   "Database Unavailable",
+                        "error":     "MongoDB is currently unavailable.",
+                        "error_code": "DB_UNAVAILABLE"
+                    }
+                }
+            }
+        },
+        502: {
+            "description": "Groq LLM service error.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success":    False,
+                        "message":   "LLM Service Error",
+                        "error":     "Groq API returned an unexpected error.",
+                        "error_code": "LLM_SERVICE_ERROR"
+                    }
+                }
+            }
+        }
+    },
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "new_conversation": {
+                            "summary": "Start a new conversation",
+                            "value":   {"message": "Hello, how can you help me today?"}
+                        },
+                        "continue_conversation": {
+                            "summary": "Continue an existing conversation",
+                            "value":   {
+                                "message":        "Can you tell me more about your pricing plans?",
+                                "conversationId": "conv_7a8b9c0d-1234-5678-abcd-ef0123456789"
+                            }
+                        },
+                        "with_temperature": {
+                            "summary": "Custom temperature setting",
+                            "value":   {
+                                "message":     "Write a creative description of our product.",
+                                "temperature": 0.8
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 )
@@ -44,31 +150,42 @@ async def process_chat(
     service: AIServiceManager = Depends(get_ai_service)
 ) -> ChatResponsePayload:
     """
-    Asynchronously processes incoming chat requests via injected AIServiceManager.
-    Performs empty message & conversation ID validation checks.
+    Executes the 10-step MongoDB-backed Chat Flow:
+    Receive → Create Conversation → Save User Message → Load History →
+    Build Prompt → Send to Groq → Receive Response → Save Assistant Message →
+    Save Token Usage + Prompt Log → Return Response.
     """
+    # Validate message is not empty
     if not payload or not payload.message or not payload.message.strip():
         raise CustomValidationException(
-            message="Empty Message Error",
+            message="Empty Message",
             detail="Message content cannot be blank or empty whitespace."
         )
 
-    msg = payload.message.strip()
-    conv_id = (payload.conversationId or payload.conversation_id)
-    temp = payload.temperature
+    msg     = payload.message.strip()
+    conv_id = getattr(payload, "conversationId", None) or getattr(payload, "conversation_id", None)
+    temp    = getattr(payload, "temperature", None)
 
+    # Validate conversation ID length
     if conv_id and len(conv_id) > 128:
-        raise InvalidConversationIdException(detail="Conversation ID exceeds maximum length threshold of 128 characters.")
-    
-    logger.info(f"[Chat API] Processing POST /api/v1/chat message: '{msg}' (temperature: {temp})")
+        raise InvalidConversationIdException(
+            detail="Conversation ID must be a non-empty string under 128 characters."
+        )
 
+    logger.info(
+        f"[Chat Router] POST /api/v1/chat | "
+        f"ConvID: {conv_id or 'new'} | Temp: {temp}"
+    )
+
+    # Delegate to AIServiceManager — full 10-step Chat Flow
     result = await service.process_message(
         message=msg,
         conversation_id=conv_id,
         temperature=temp
     )
 
-    usage_data = result.get("usage", {})
+    # Build token usage model
+    usage_data  = result.get("usage", {})
     usage_model = TokenUsage(
         prompt_tokens=usage_data.get("prompt_tokens", 0),
         completion_tokens=usage_data.get("completion_tokens", 0),
@@ -79,12 +196,12 @@ async def process_chat(
         success=True,
         message="Response generated successfully",
         data=ChatResponseData(
-            conversationId=result.get("conversation_id", "conv_default_001"),
-            messageId=result.get("message_id", "msg_default_001"),
-            reply=result.get("reply", "Hello from Groq LLaMA-3"),
+            conversationId=result.get("conversation_id", "conv_default"),
+            messageId=result.get("message_id", "msg_default"),
+            reply=result.get("reply", ""),
             processingTime=result.get("processingTime", "15ms"),
             model=result.get("model", settings.MODEL_NAME),
-            historyLength=result.get("historyLength", 2),
+            historyLength=result.get("historyLength", 0),
             usage=usage_model
         )
     )

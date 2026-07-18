@@ -1,48 +1,148 @@
-from fastapi import APIRouter, Depends, status
-from typing import List, Dict, Any
-from app.schemas.payload import ErrorResponse
+from fastapi import APIRouter, Depends, Query, status
+from typing import Dict, Any, Optional
 from app.conversation.conversation_manager import conversation_manager, ConversationManager
-from app.utils.exceptions import ConversationNotFoundException
+from app.utils.exceptions import ConversationNotFoundException, InvalidConversationIdException
+from app.schemas.payload import ErrorResponse
 
 router = APIRouter()
+
 
 def get_conversation_manager() -> ConversationManager:
     """Dependency injection provider for ConversationManager."""
     return conversation_manager
 
+
+# ======================================================================
+# GET /api/v1/conversations
+# ======================================================================
 @router.get(
     "/",
     status_code=status.HTTP_200_OK,
-    summary="List All Active Conversations",
-    description="Returns summary metadata list of all active in-memory conversations.",
+    summary="List All Conversations",
+    description=(
+        "Returns a paginated list of conversation sessions stored in MongoDB. "
+        "Supports limit, page, and sort query parameters."
+    ),
     responses={
-        200: {"description": "List of active conversations retrieved successfully."}
+        200: {"description": "Conversations retrieved successfully."}
     }
 )
 async def list_conversations(
-    mgr: ConversationManager = Depends(get_conversation_manager)
+    limit: int = Query(default=20,  ge=1, le=100, description="Number of conversations per page."),
+    page:  int = Query(default=1,   ge=1,          description="Page number (1-indexed)."),
+    sort:  str = Query(default="desc",              description="Sort order: 'desc' (newest first) or 'asc' (oldest first)."),
+    mgr:   ConversationManager = Depends(get_conversation_manager)
 ) -> Dict[str, Any]:
     """
-    Asynchronously retrieves a summary list of all conversations.
+    Retrieves paginated conversations from MongoDB.
+    Internally: Router → ConversationManager → MemoryService → ConversationRepository → MongoDB.
     """
-    conversations_list = mgr.list_conversations()
+    if sort not in ("asc", "desc"):
+        sort = "desc"
+
+    result = await mgr.list_conversations(limit=limit, page=page, sort=sort)
     return {
         "success": True,
         "message": "Conversations retrieved successfully",
         "data": {
-            "conversations": conversations_list,
-            "total_count": len(conversations_list)
+            "conversations": result["conversations"],
+            "pagination": {
+                "total_count":  result["total_count"],
+                "page":         result["page"],
+                "limit":        result["limit"],
+                "total_pages":  result["total_pages"]
+            }
         }
     }
 
+
+# ======================================================================
+# GET /api/v1/conversations/search
+# ======================================================================
+@router.get(
+    "/search",
+    status_code=status.HTTP_200_OK,
+    summary="Search Conversations",
+    description=(
+        "Search conversation sessions stored in MongoDB by conversationId, status, "
+        "and/or date range. All filters are optional and combinable. "
+        "Results are paginated and enriched with message_count."
+    ),
+    responses={
+        200: {"description": "Search results retrieved successfully."}
+    }
+)
+async def search_conversations(
+    conversationId: Optional[str] = Query(default=None, description="Partial case-insensitive match on conversationId."),
+    status_filter:  Optional[str] = Query(default=None, alias="status", description="Exact status match: active | closed | archived."),
+    date_from:      Optional[str] = Query(default=None, description="ISO 8601 start date. e.g. 2026-07-01T00:00:00"),
+    date_to:        Optional[str] = Query(default=None, description="ISO 8601 end date.   e.g. 2026-07-18T23:59:59"),
+    limit:          int           = Query(default=20, ge=1, le=100, description="Documents per page."),
+    page:           int           = Query(default=1,  ge=1,         description="Page number (1-indexed)."),
+    sort:           str           = Query(default="desc",           description="Sort order: 'desc' or 'asc'."),
+    mgr: ConversationManager = Depends(get_conversation_manager)
+) -> Dict[str, Any]:
+    """
+    Searches MongoDB conversations using any combination of:
+    - conversationId (partial match)
+    - status         (active | closed | archived)
+    - date_from / date_to (ISO 8601 range on createdAt)
+    """
+    if sort not in ("asc", "desc"):
+        sort = "desc"
+
+    # Validate status if provided
+    valid_statuses = {"active", "closed", "archived"}
+    if status_filter and status_filter.lower() not in valid_statuses:
+        raise InvalidConversationIdException(
+            detail=f"Invalid status '{status_filter}'. Must be one of: active, closed, archived."
+        )
+
+    result = await mgr.search_conversations(
+        conversation_id=conversationId,
+        status=status_filter,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
+        page=page,
+        sort=sort
+    )
+    return {
+        "success": True,
+        "message": "Search results retrieved successfully",
+        "data": {
+            "conversations": result["conversations"],
+            "filters": {
+                "conversationId": conversationId,
+                "status":         status_filter,
+                "date_from":      date_from,
+                "date_to":        date_to
+            },
+            "pagination": {
+                "total_count":  result["total_count"],
+                "page":         result["page"],
+                "limit":        result["limit"],
+                "total_pages":  result["total_pages"]
+            }
+        }
+    }
+
+
+# ======================================================================
+# GET /api/v1/conversations/{conversationId}
+# ======================================================================
 @router.get(
     "/{conversationId}",
     status_code=status.HTTP_200_OK,
     summary="Get Conversation By ID",
-    description="Retrieves a specific conversation session including complete message history.",
+    description=(
+        "Retrieves a specific conversation session from MongoDB by conversationId, "
+        "including full metadata and status."
+    ),
     responses={
-        200: {"description": "Conversation details retrieved successfully."},
-        404: {"model": ErrorResponse, "description": "Conversation ID not found."}
+        200: {"description": "Conversation retrieved successfully."},
+        400: {"model": ErrorResponse, "description": "Invalid Conversation ID."},
+        404: {"model": ErrorResponse, "description": "Conversation not found."}
     }
 )
 async def get_conversation(
@@ -50,43 +150,147 @@ async def get_conversation(
     mgr: ConversationManager = Depends(get_conversation_manager)
 ) -> Dict[str, Any]:
     """
-    Asynchronously retrieves details for a single conversation ID.
-    Raises ConversationNotFoundException if ID is missing.
+    Retrieves a single conversation document from MongoDB.
+    Raises ConversationNotFoundException if not found.
     """
-    conv = mgr.get_conversation(conversationId)
+    if not conversationId or len(conversationId) > 128:
+        raise InvalidConversationIdException(
+            detail="Conversation ID must be a non-empty string under 128 characters."
+        )
+
+    conv = await mgr.get_conversation(conversationId)
     if not conv:
         raise ConversationNotFoundException(conversation_id=conversationId)
 
     return {
         "success": True,
-        "message": "Conversation details retrieved successfully",
-        "data": conv
+        "message": "Conversation retrieved successfully",
+        "data":    conv
     }
 
+
+# ======================================================================
+# DELETE /api/v1/conversations/{conversationId}  — SOFT DELETE
+# ======================================================================
 @router.delete(
     "/{conversationId}",
     status_code=status.HTTP_200_OK,
-    summary="Delete Conversation By ID",
-    description="Deletes a conversation session and clears its message history.",
+    summary="Soft Delete Conversation",
+    description=(
+        "Soft-deletes a conversation by setting its status to DELETED. "
+        "The MongoDB document is NEVER permanently removed. "
+        "Soft-deleted conversations are excluded from all list and search results. "
+        "Use PATCH /{conversationId}/restore to undo."
+    ),
     responses={
-        200: {"description": "Conversation deleted successfully."},
-        404: {"model": ErrorResponse, "description": "Conversation ID not found."}
+        200: {"description": "Conversation soft-deleted successfully."},
+        400: {"model": ErrorResponse, "description": "Invalid Conversation ID."},
+        404: {"model": ErrorResponse, "description": "Conversation not found."}
     }
 )
 async def delete_conversation(
     conversationId: str,
     mgr: ConversationManager = Depends(get_conversation_manager)
 ) -> Dict[str, Any]:
-    """
-    Asynchronously deletes a single conversation session by ID.
-    Raises ConversationNotFoundException if ID is missing.
-    """
-    deleted = mgr.delete_conversation(conversationId)
+    """Soft-deletes a conversation: status → DELETED. Document preserved in MongoDB."""
+    if not conversationId or len(conversationId) > 128:
+        raise InvalidConversationIdException(
+            detail="Conversation ID must be a non-empty string under 128 characters."
+        )
+
+    deleted = await mgr.delete_conversation(conversationId)
     if not deleted:
         raise ConversationNotFoundException(conversation_id=conversationId)
 
     return {
         "success": True,
-        "message": f"Conversation '{conversationId}' deleted successfully",
-        "data": {"conversation_id": conversationId}
+        "message": f"Conversation '{conversationId}' soft-deleted successfully",
+        "data": {
+            "conversation_id": conversationId,
+            "status":          "deleted"
+        }
     }
+
+
+# ======================================================================
+# PATCH /api/v1/conversations/{conversationId}/archive
+# ======================================================================
+@router.patch(
+    "/{conversationId}/archive",
+    status_code=status.HTTP_200_OK,
+    summary="Archive Conversation",
+    description=(
+        "Archives a conversation by setting its status to ARCHIVED. "
+        "Archived conversations remain visible in list and search results "
+        "but are no longer considered active."
+    ),
+    responses={
+        200: {"description": "Conversation archived successfully."},
+        400: {"model": ErrorResponse, "description": "Invalid Conversation ID."},
+        404: {"model": ErrorResponse, "description": "Conversation not found."}
+    }
+)
+async def archive_conversation(
+    conversationId: str,
+    mgr: ConversationManager = Depends(get_conversation_manager)
+) -> Dict[str, Any]:
+    """Archives a conversation: status → ARCHIVED."""
+    if not conversationId or len(conversationId) > 128:
+        raise InvalidConversationIdException(
+            detail="Conversation ID must be a non-empty string under 128 characters."
+        )
+
+    archived = await mgr.archive_conversation(conversationId)
+    if not archived:
+        raise ConversationNotFoundException(conversation_id=conversationId)
+
+    return {
+        "success": True,
+        "message": f"Conversation '{conversationId}' archived successfully",
+        "data": {
+            "conversation_id": conversationId,
+            "status":          "archived"
+        }
+    }
+
+
+# ======================================================================
+# PATCH /api/v1/conversations/{conversationId}/restore
+# ======================================================================
+@router.patch(
+    "/{conversationId}/restore",
+    status_code=status.HTTP_200_OK,
+    summary="Restore Conversation",
+    description=(
+        "Restores a DELETED or ARCHIVED conversation back to ACTIVE status. "
+        "The conversation will reappear in all list and search results."
+    ),
+    responses={
+        200: {"description": "Conversation restored successfully."},
+        400: {"model": ErrorResponse, "description": "Invalid Conversation ID."},
+        404: {"model": ErrorResponse, "description": "Conversation not found."}
+    }
+)
+async def restore_conversation(
+    conversationId: str,
+    mgr: ConversationManager = Depends(get_conversation_manager)
+) -> Dict[str, Any]:
+    """Restores a DELETED or ARCHIVED conversation: status → ACTIVE."""
+    if not conversationId or len(conversationId) > 128:
+        raise InvalidConversationIdException(
+            detail="Conversation ID must be a non-empty string under 128 characters."
+        )
+
+    restored = await mgr.restore_conversation(conversationId)
+    if not restored:
+        raise ConversationNotFoundException(conversation_id=conversationId)
+
+    return {
+        "success": True,
+        "message": f"Conversation '{conversationId}' restored to active successfully",
+        "data": {
+            "conversation_id": conversationId,
+            "status":          "active"
+        }
+    }
+
