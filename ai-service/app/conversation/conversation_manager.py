@@ -38,7 +38,8 @@ class ConversationManager:
     async def create_conversation(
         self,
         conversation_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Creates a new conversation session.
@@ -47,35 +48,53 @@ class ConversationManager:
         cid = conversation_id or self.generate_conversation_id()
         doc = await self._memory.createConversation(
             conversation_id=cid,
-            metadata=metadata
+            metadata=metadata,
+            user_id=user_id
         )
         logger.info(f"[ConversationManager] Created conversation '{cid}'")
         return doc
 
-    async def get_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+    async def get_conversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> Optional[Dict[str, Any]]:
         """
         Retrieves a conversation session by ID.
         Returns None if not found.
         """
-        return await self._memory.loadConversation(conversation_id)
+        return await self._memory.loadConversation(conversation_id, user_id=user_id, is_admin=is_admin)
 
-    async def conversation_exists(self, conversation_id: str) -> bool:
+    async def conversation_exists(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Returns True if the conversation session exists.
         """
-        return await self._memory.conversationExists(conversation_id)
+        return await self._memory.conversationExists(conversation_id, user_id=user_id, is_admin=is_admin)
 
-    async def conversation_exists_any(self, conversation_id: str) -> bool:
+    async def conversation_exists_any(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Returns True if the conversation exists in any status, including deleted.
         """
-        return await self._memory.conversationExistsAny(conversation_id)
+        return await self._memory.conversationExistsAny(conversation_id, user_id=user_id, is_admin=is_admin)
 
     async def list_conversations(
         self,
         limit: int = 20,
         page: int = 1,
-        sort: str = "desc"
+        sort: str = "desc",
+        user_id: Optional[str] = None,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         """
         Returns a paginated summary of all conversation sessions
@@ -84,7 +103,9 @@ class ConversationManager:
         return await self._memory.listConversations(
             limit=limit,
             page=page,
-            sort=sort
+            sort=sort,
+            user_id=user_id,
+            is_admin=is_admin
         )
 
     async def search_conversations(
@@ -95,7 +116,9 @@ class ConversationManager:
         date_to: Optional[str] = None,
         limit: int = 20,
         page: int = 1,
-        sort: str = "desc"
+        sort: str = "desc",
+        user_id: Optional[str] = None,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         """
         Searches conversation sessions by conversationId, status, and date range.
@@ -117,17 +140,24 @@ class ConversationManager:
             date_to=date_to,
             limit=limit,
             page=page,
-            sort=sort
+            sort=sort,
+            user_id=user_id,
+            is_admin=is_admin
         )
 
-    async def delete_conversation(self, conversation_id: str) -> bool:
+    async def delete_conversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Soft-deletes a conversation by setting status=DELETED.
         The MongoDB document is NEVER permanently removed.
         Soft-deleted conversations disappear from all list/search results.
         Returns True if soft-deleted, False if not found.
         """
-        deleted = await self._memory.deleteConversation(conversation_id)
+        deleted = await self._memory.deleteConversation(conversation_id, user_id=user_id, is_admin=is_admin)
         if deleted:
             logger.info(
                 f"[ConversationManager] Soft-deleted conversation '{conversation_id}' "
@@ -135,13 +165,18 @@ class ConversationManager:
             )
         return deleted
 
-    async def archive_conversation(self, conversation_id: str) -> bool:
+    async def archive_conversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Archives a conversation by setting status=ARCHIVED.
         Archived conversations remain visible in list/search results.
         Returns True if archived, False if not found.
         """
-        archived = await self._memory.archiveConversation(conversation_id)
+        archived = await self._memory.archiveConversation(conversation_id, user_id=user_id, is_admin=is_admin)
         if archived:
             logger.info(
                 f"[ConversationManager] Archived conversation '{conversation_id}' "
@@ -149,12 +184,17 @@ class ConversationManager:
             )
         return archived
 
-    async def restore_conversation(self, conversation_id: str) -> bool:
+    async def restore_conversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Restores a DELETED or ARCHIVED conversation back to ACTIVE status.
         Returns True if restored, False if not found.
         """
-        restored = await self._memory.restoreConversation(conversation_id)
+        restored = await self._memory.restoreConversation(conversation_id, user_id=user_id, is_admin=is_admin)
         if restored:
             logger.info(
                 f"[ConversationManager] Restored conversation '{conversation_id}' "
@@ -162,12 +202,17 @@ class ConversationManager:
             )
         return restored
 
-    async def clear_conversation(self, conversation_id: str) -> bool:
+    async def clear_conversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Clears all messages in a conversation without deleting
         the conversation document itself.
         """
-        cleared = await self._memory.clearConversation(conversation_id)
+        cleared = await self._memory.clearConversation(conversation_id, user_id=user_id, is_admin=is_admin)
         if cleared:
             logger.info(f"[ConversationManager] Cleared messages in conversation '{conversation_id}'")
         return cleared

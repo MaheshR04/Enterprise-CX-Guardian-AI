@@ -39,17 +39,21 @@ class ConversationRepository:
     async def insert_one(
         self,
         conversation_id: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Inserts a new conversation document with status=ACTIVE."""
         now = datetime.utcnow().isoformat()
+        merged_metadata = dict(metadata or {})
+        if user_id:
+            merged_metadata["userId"] = user_id
         doc = {
             "conversation_id": conversation_id,
             "created_at":      now,
             "updated_at":      now,
             "deleted_at":      None,
             "status":          CONVERSATION_STATUS_ACTIVE,
-            "metadata":        metadata or {}
+            "metadata":        merged_metadata
         }
         col = self._collection()
         if col is not None:
@@ -160,17 +164,22 @@ class ConversationRepository:
     # Read
     # ------------------------------------------------------------------
 
-    async def find_by_id(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+    async def find_by_id(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> Optional[Dict[str, Any]]:
         """
         Retrieves a single conversation document by conversation_id.
         Returns documents regardless of status (including soft-deleted).
         """
         col = self._collection()
         if col is not None:
-            return await col.find_one(
-                {"conversation_id": conversation_id},
-                {"_id": 0}
-            )
+            query = {"conversation_id": conversation_id}
+            if user_id and not is_admin:
+                query["metadata.userId"] = user_id
+            return await col.find_one(query, {"_id": 0})
         return None
 
     async def find_all(
@@ -178,7 +187,9 @@ class ConversationRepository:
         limit: int = 20,
         page: int = 1,
         sort_field: str = "created_at",
-        sort_order: int = -1
+        sort_order: int = -1,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         """
         Retrieves paginated conversation documents from MongoDB.
@@ -188,6 +199,8 @@ class ConversationRepository:
         if col is not None:
             # Exclude soft-deleted conversations from normal listing
             base_query = {"status": {"$ne": CONVERSATION_STATUS_DELETED}}
+            if user_id and not is_admin:
+                base_query["metadata.userId"] = user_id
             skip        = (page - 1) * limit
             total       = await col.count_documents(base_query)
             cursor      = (
@@ -219,7 +232,9 @@ class ConversationRepository:
         limit: int = 20,
         page: int = 1,
         sort_field: str = "created_at",
-        sort_order: int = -1
+        sort_order: int = -1,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         """
         Searches conversations with optional filters.
@@ -240,6 +255,8 @@ class ConversationRepository:
 
         # Exclude soft-deleted unless caller explicitly requests status=deleted
         query: Dict[str, Any] = {}
+        if user_id and not is_admin:
+            query["metadata.userId"] = user_id
         if status:
             query["status"] = status.lower()
         else:
@@ -307,27 +324,33 @@ class ConversationRepository:
             return {row["_id"]: row["count"] for row in result}
         return {"active": 0, "archived": 0, "deleted": 0}
 
-    async def exists(self, conversation_id: str) -> bool:
+    async def exists(self, conversation_id: str, user_id: Optional[str] = None, is_admin: bool = False) -> bool:
         """
         Returns True if the conversation exists and is NOT soft-deleted.
         """
         col = self._collection()
         if col is not None:
-            n = await col.count_documents({
+            query = {
                 "conversation_id": conversation_id,
                 "status":          {"$ne": CONVERSATION_STATUS_DELETED}
-            })
+            }
+            if user_id and not is_admin:
+                query["metadata.userId"] = user_id
+            n = await col.count_documents(query)
             return n > 0
         return False
 
-    async def exists_any(self, conversation_id: str) -> bool:
+    async def exists_any(self, conversation_id: str, user_id: Optional[str] = None, is_admin: bool = False) -> bool:
         """
         Returns True if the conversation exists regardless of status
         (including soft-deleted).
         """
         col = self._collection()
         if col is not None:
-            n = await col.count_documents({"conversation_id": conversation_id})
+            query = {"conversation_id": conversation_id}
+            if user_id and not is_admin:
+                query["metadata.userId"] = user_id
+            n = await col.count_documents(query)
             return n > 0
         return False
 

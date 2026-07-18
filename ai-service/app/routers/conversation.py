@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, Query, status
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 from app.conversation.conversation_manager import conversation_manager, ConversationManager
+from app.middleware.auth import get_current_user
+from app.schemas.auth import UserProfile
 from app.utils.exceptions import (
     ConversationNotFoundException,
     InvalidConversationIdException,
@@ -49,6 +51,7 @@ def get_conversation_manager() -> ConversationManager:
 )
 async def create_conversation(
     payload: CreateConversationRequest,
+    current_user: UserProfile = Depends(get_current_user),
     mgr: ConversationManager = Depends(get_conversation_manager)
 ) -> Dict[str, Any]:
     """Creates a new MongoDB-backed conversation session."""
@@ -59,7 +62,8 @@ async def create_conversation(
 
     conversation = await mgr.create_conversation(
         conversation_id=payload.conversationId,
-        metadata=payload.metadata
+        metadata=payload.metadata,
+        user_id=current_user.userId
     )
 
     return {
@@ -88,6 +92,7 @@ async def list_conversations(
     limit: int = Query(default=20,  ge=1, le=100, description="Number of conversations per page."),
     page:  int = Query(default=1,   ge=1,          description="Page number (1-indexed)."),
     sort:  str = Query(default="desc",              description="Sort order: 'desc' (newest first) or 'asc' (oldest first)."),
+    current_user: UserProfile = Depends(get_current_user),
     mgr:   ConversationManager = Depends(get_conversation_manager)
 ) -> Dict[str, Any]:
     """
@@ -97,7 +102,8 @@ async def list_conversations(
     if sort not in ("asc", "desc"):
         sort = "desc"
 
-    result = await mgr.list_conversations(limit=limit, page=page, sort=sort)
+    is_admin = current_user.role.upper() in {"ADMIN", "SUPER_ADMIN"}
+    result = await mgr.list_conversations(limit=limit, page=page, sort=sort, user_id=current_user.userId, is_admin=is_admin)
     return {
         "success": True,
         "message": "Conversations retrieved successfully",
@@ -137,6 +143,7 @@ async def search_conversations(
     limit:          int           = Query(default=20, ge=1, le=100, description="Documents per page."),
     page:           int           = Query(default=1,  ge=1,         description="Page number (1-indexed)."),
     sort:           str           = Query(default="desc",           description="Sort order: 'desc' or 'asc'."),
+    current_user: UserProfile = Depends(get_current_user),
     mgr: ConversationManager = Depends(get_conversation_manager)
 ) -> Dict[str, Any]:
     """
@@ -153,6 +160,7 @@ async def search_conversations(
     if status_filter and status_filter.lower() not in valid_statuses:
         raise InvalidStatusException(status_filter)
 
+    is_admin = current_user.role.upper() in {"ADMIN", "SUPER_ADMIN"}
     result = await mgr.search_conversations(
         conversation_id=conversationId,
         status=status_filter,
@@ -160,7 +168,9 @@ async def search_conversations(
         date_to=date_to,
         limit=limit,
         page=page,
-        sort=sort
+        sort=sort,
+        user_id=current_user.userId,
+        is_admin=is_admin
     )
     return {
         "success": True,
@@ -202,6 +212,7 @@ async def search_conversations(
 )
 async def get_conversation(
     conversationId: str,
+    current_user: UserProfile = Depends(get_current_user),
     mgr: ConversationManager = Depends(get_conversation_manager)
 ) -> Dict[str, Any]:
     """
@@ -213,7 +224,8 @@ async def get_conversation(
             detail="Conversation ID must be a non-empty string under 128 characters."
         )
 
-    conv = await mgr.get_conversation(conversationId)
+    is_admin = current_user.role.upper() in {"ADMIN", "SUPER_ADMIN"}
+    conv = await mgr.get_conversation(conversationId, user_id=current_user.userId, is_admin=is_admin)
     if not conv:
         raise ConversationNotFoundException(conversation_id=conversationId)
 
@@ -245,6 +257,7 @@ async def get_conversation(
 )
 async def delete_conversation(
     conversationId: str,
+    current_user: UserProfile = Depends(get_current_user),
     mgr: ConversationManager = Depends(get_conversation_manager)
 ) -> Dict[str, Any]:
     """Soft-deletes a conversation: status → DELETED. Document preserved in MongoDB."""
@@ -253,7 +266,8 @@ async def delete_conversation(
             detail="Conversation ID must be a non-empty string under 128 characters."
         )
 
-    deleted = await mgr.delete_conversation(conversationId)
+    is_admin = current_user.role.upper() in {"ADMIN", "SUPER_ADMIN"}
+    deleted = await mgr.delete_conversation(conversationId, user_id=current_user.userId, is_admin=is_admin)
     if not deleted:
         raise ConversationNotFoundException(conversation_id=conversationId)
 
@@ -287,6 +301,7 @@ async def delete_conversation(
 )
 async def archive_conversation(
     conversationId: str,
+    current_user: UserProfile = Depends(get_current_user),
     mgr: ConversationManager = Depends(get_conversation_manager)
 ) -> Dict[str, Any]:
     """Archives a conversation: status → ARCHIVED."""
@@ -295,7 +310,8 @@ async def archive_conversation(
             detail="Conversation ID must be a non-empty string under 128 characters."
         )
 
-    archived = await mgr.archive_conversation(conversationId)
+    is_admin = current_user.role.upper() in {"ADMIN", "SUPER_ADMIN"}
+    archived = await mgr.archive_conversation(conversationId, user_id=current_user.userId, is_admin=is_admin)
     if not archived:
         raise ConversationNotFoundException(conversation_id=conversationId)
 
@@ -328,6 +344,7 @@ async def archive_conversation(
 )
 async def restore_conversation(
     conversationId: str,
+    current_user: UserProfile = Depends(get_current_user),
     mgr: ConversationManager = Depends(get_conversation_manager)
 ) -> Dict[str, Any]:
     """Restores a DELETED or ARCHIVED conversation: status → ACTIVE."""
@@ -336,7 +353,8 @@ async def restore_conversation(
             detail="Conversation ID must be a non-empty string under 128 characters."
         )
 
-    restored = await mgr.restore_conversation(conversationId)
+    is_admin = current_user.role.upper() in {"ADMIN", "SUPER_ADMIN"}
+    restored = await mgr.restore_conversation(conversationId, user_id=current_user.userId, is_admin=is_admin)
     if not restored:
         raise ConversationNotFoundException(conversation_id=conversationId)
 

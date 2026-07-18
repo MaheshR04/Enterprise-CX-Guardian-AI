@@ -14,6 +14,7 @@ from app.repositories.interfaces import IPromptRepository, IUsageRepository
 from app.repositories.factory import repository_factory
 from app.core.config import settings
 from app.core.logger import logger, log_conversation
+from app.utils.exceptions import AuthenticationException
 
 
 class AIServiceManager:
@@ -64,10 +65,13 @@ class AIServiceManager:
         logger.info(f"[Chat Flow] Step 1 — Received request for conversation '{cid}'")
 
         # ── Step 2: Create conversation if necessary ─────────────────
-        exists = await self.conv_mgr.conversation_exists(cid)
         metadata = {"userId": user_id} if user_id else None
+        exists = await self.conv_mgr.conversation_exists(cid, user_id=user_id, is_admin=False)
         if not exists:
-            await self.conv_mgr.create_conversation(conversation_id=cid, metadata=metadata)
+            existing_any = await self.conv_mgr.conversation_exists_any(cid)
+            if existing_any:
+                raise AuthenticationException("You do not have access to this conversation")
+            await self.conv_mgr.create_conversation(conversation_id=cid, metadata=metadata, user_id=user_id)
             logger.info(f"[Chat Flow] Step 2 — Created new conversation '{cid}' in MongoDB")
         else:
             logger.info(f"[Chat Flow] Step 2 — Conversation '{cid}' already exists")

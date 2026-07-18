@@ -54,7 +54,8 @@ class MemoryService:
     async def createConversation(
         self,
         conversation_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Creates and permanently stores a new conversation session in MongoDB.
@@ -68,7 +69,8 @@ class MemoryService:
 
         doc = await self._conv_repo.insert_one(
             conversation_id=cid,
-            metadata=metadata
+            metadata=metadata,
+            user_id=user_id
         )
         logger.info(f"[MemoryService] Created conversation '{cid}'")
         return doc
@@ -77,9 +79,10 @@ class MemoryService:
     async def create_conversation(
         self,
         conversation_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        return await self.createConversation(conversation_id=conversation_id, metadata=metadata)
+        return await self.createConversation(conversation_id=conversation_id, metadata=metadata, user_id=user_id)
 
     # ==============================================================
     # 2. saveMessage()
@@ -127,12 +130,17 @@ class MemoryService:
     # ==============================================================
     # 3. loadConversation()
     # ==============================================================
-    async def loadConversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+    async def loadConversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> Optional[Dict[str, Any]]:
         """
         Retrieves a conversation document from MongoDB with messages and telemetry.
         Returns None if the conversation does not exist.
         """
-        conv = await self._conv_repo.find_by_id(conversation_id)
+        conv = await self._conv_repo.find_by_id(conversation_id, user_id=user_id, is_admin=is_admin)
         if not conv:
             logger.info(f"[MemoryService] Conversation '{conversation_id}' not found in MongoDB")
             return None
@@ -152,19 +160,33 @@ class MemoryService:
         return conv
 
     # snake_case alias
-    async def load_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
-        return await self.loadConversation(conversation_id)
+    async def load_conversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        return await self.loadConversation(conversation_id, user_id=user_id, is_admin=is_admin)
 
     # ==============================================================
     # 4. deleteConversation()  — SOFT DELETE
     # ==============================================================
-    async def deleteConversation(self, conversation_id: str) -> bool:
+    async def deleteConversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Soft-deletes a conversation by setting status=DELETED.
         The MongoDB document is NEVER permanently removed.
         Soft-deleted conversations are excluded from all list/search queries.
         Returns True if successfully soft-deleted, False if not found.
         """
+        if not is_admin and user_id:
+            existing = await self._conv_repo.find_by_id(conversation_id, user_id=user_id, is_admin=False)
+            if not existing:
+                return False
         deleted = await self._conv_repo.soft_delete(conversation_id)
         if deleted:
             logger.info(
@@ -180,12 +202,21 @@ class MemoryService:
     # ==============================================================
     # archiveConversation()
     # ==============================================================
-    async def archiveConversation(self, conversation_id: str) -> bool:
+    async def archiveConversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Archives a conversation by setting status=ARCHIVED.
         Archived conversations remain visible in list/search results.
         Returns True if successfully archived, False if not found.
         """
+        if not is_admin and user_id:
+            existing = await self._conv_repo.find_by_id(conversation_id, user_id=user_id, is_admin=False)
+            if not existing:
+                return False
         archived = await self._conv_repo.archive(conversation_id)
         if archived:
             logger.info(
@@ -195,17 +226,31 @@ class MemoryService:
         return archived
 
     # snake_case alias
-    async def archive_conversation(self, conversation_id: str) -> bool:
-        return await self.archiveConversation(conversation_id)
+    async def archive_conversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
+        return await self.archiveConversation(conversation_id, user_id=user_id, is_admin=is_admin)
 
     # ==============================================================
     # restoreConversation()
     # ==============================================================
-    async def restoreConversation(self, conversation_id: str) -> bool:
+    async def restoreConversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Restores a DELETED or ARCHIVED conversation back to ACTIVE status.
         Returns True if successfully restored, False if not found.
         """
+        if not is_admin and user_id:
+            existing = await self._conv_repo.find_by_id(conversation_id, user_id=user_id, is_admin=False)
+            if not existing:
+                return False
         restored = await self._conv_repo.restore(conversation_id)
         if restored:
             logger.info(
@@ -215,13 +260,13 @@ class MemoryService:
         return restored
 
     # snake_case alias
-    async def restore_conversation(self, conversation_id: str) -> bool:
-        return await self.restoreConversation(conversation_id)
-
-
-    # snake_case alias
-    async def delete_conversation(self, conversation_id: str) -> bool:
-        return await self.deleteConversation(conversation_id)
+    async def restore_conversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
+        return await self.restoreConversation(conversation_id, user_id=user_id, is_admin=is_admin)
 
     # ==============================================================
     # 5. listConversations()
@@ -230,7 +275,9 @@ class MemoryService:
         self,
         limit: int = 20,
         page: int = 1,
-        sort: str = "desc"
+        sort: str = "desc",
+        user_id: Optional[str] = None,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         """
         Returns a paginated list of conversation documents from MongoDB,
@@ -246,7 +293,9 @@ class MemoryService:
             limit=limit,
             page=page,
             sort_field="created_at",
-            sort_order=sort_order
+            sort_order=sort_order,
+            user_id=user_id,
+            is_admin=is_admin
         )
 
         # Enrich each document with live message count
@@ -280,9 +329,11 @@ class MemoryService:
         self,
         limit: int = 20,
         page: int = 1,
-        sort: str = "desc"
+        sort: str = "desc",
+        user_id: Optional[str] = None,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
-        return await self.listConversations(limit=limit, page=page, sort=sort)
+        return await self.listConversations(limit=limit, page=page, sort=sort, user_id=user_id, is_admin=is_admin)
 
     # ==============================================================
     # searchConversations()
@@ -295,7 +346,9 @@ class MemoryService:
         date_to: Optional[str] = None,
         limit: int = 20,
         page: int = 1,
-        sort: str = "desc"
+        sort: str = "desc",
+        user_id: Optional[str] = None,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         """
         Searches conversations in MongoDB with optional filters:
@@ -315,7 +368,9 @@ class MemoryService:
             limit=limit,
             page=page,
             sort_field="created_at",
-            sort_order=sort_order
+            sort_order=sort_order,
+            user_id=user_id,
+            is_admin=is_admin
         )
 
         # Enrich each document with live message count
@@ -354,7 +409,9 @@ class MemoryService:
         date_to: Optional[str] = None,
         limit: int = 20,
         page: int = 1,
-        sort: str = "desc"
+        sort: str = "desc",
+        user_id: Optional[str] = None,
+        is_admin: bool = False
     ) -> Dict[str, Any]:
         return await self.searchConversations(
             conversation_id=conversation_id,
@@ -363,18 +420,29 @@ class MemoryService:
             date_to=date_to,
             limit=limit,
             page=page,
-            sort=sort
+            sort=sort,
+            user_id=user_id,
+            is_admin=is_admin
         )
 
     # ==============================================================
     # 6. clearConversation()
     # ==============================================================
-    async def clearConversation(self, conversation_id: str) -> bool:
+    async def clearConversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Clears all messages in a conversation without deleting the
         conversation document itself. Resets updatedAt timestamp.
         Returns True if messages were cleared.
         """
+        if not is_admin and user_id:
+            existing = await self._conv_repo.find_by_id(conversation_id, user_id=user_id, is_admin=False)
+            if not existing:
+                return False
         deleted_count = await self._msg_repo.delete_by_conversation_id(conversation_id)
         await self._conv_repo.update_timestamp(conversation_id)
         logger.info(
@@ -383,8 +451,13 @@ class MemoryService:
         return deleted_count > 0
 
     # snake_case alias
-    async def clear_conversation(self, conversation_id: str) -> bool:
-        return await self.clearConversation(conversation_id)
+    async def clear_conversation(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
+        return await self.clearConversation(conversation_id, user_id=user_id, is_admin=is_admin)
 
     # ==============================================================
     # Context Window Helpers (used by AIServiceManager)
@@ -441,23 +514,43 @@ class MemoryService:
     ) -> str:
         return await self.formatHistoryForPrompt(conversation_id=conversation_id, limit=limit)
 
-    async def conversationExists(self, conversation_id: str) -> bool:
+    async def conversationExists(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Checks whether a conversation session exists in MongoDB.
         """
-        return await self._conv_repo.exists(conversation_id)
+        return await self._conv_repo.exists(conversation_id, user_id=user_id, is_admin=is_admin)
 
-    async def conversation_exists(self, conversation_id: str) -> bool:
-        return await self.conversationExists(conversation_id)
+    async def conversation_exists(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
+        return await self.conversationExists(conversation_id, user_id=user_id, is_admin=is_admin)
 
-    async def conversationExistsAny(self, conversation_id: str) -> bool:
+    async def conversationExistsAny(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
         """
         Checks whether a conversation exists in any lifecycle state.
         """
-        return await self._conv_repo.exists_any(conversation_id)
+        return await self._conv_repo.exists_any(conversation_id, user_id=user_id, is_admin=is_admin)
 
-    async def conversation_exists_any(self, conversation_id: str) -> bool:
-        return await self.conversationExistsAny(conversation_id)
+    async def conversation_exists_any(
+        self,
+        conversation_id: str,
+        user_id: Optional[str] = None,
+        is_admin: bool = False
+    ) -> bool:
+        return await self.conversationExistsAny(conversation_id, user_id=user_id, is_admin=is_admin)
 
 
 memory_service = MemoryService()
