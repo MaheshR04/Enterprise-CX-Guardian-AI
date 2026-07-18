@@ -1,9 +1,11 @@
 import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+from pymongo.errors import DuplicateKeyError
 from app.database.connection import db_connection
 from app.core.config import settings
 from app.core.logger import logger
+from app.utils.exceptions import DuplicateConversationIdException
 
 # Valid lifecycle status values
 CONVERSATION_STATUS_ACTIVE   = "active"
@@ -51,7 +53,10 @@ class ConversationRepository:
         }
         col = self._collection()
         if col is not None:
-            await col.insert_one({**doc})
+            try:
+                await col.insert_one({**doc})
+            except DuplicateKeyError:
+                raise DuplicateConversationIdException(conversation_id)
             logger.info(f"[ConversationRepo] Inserted conversation '{conversation_id}' [status=active]")
         return doc
 

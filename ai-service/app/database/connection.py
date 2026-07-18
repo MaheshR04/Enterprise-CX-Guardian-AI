@@ -95,6 +95,7 @@ class DatabaseConnection:
                 f"[DB Connect] Collections registered: "
                 f"conversations | messages | prompt_logs | ai_usage"
             )
+            await cls.ensure_indexes()
 
         except Exception as err:
             elapsed_ms = (time.perf_counter() - connect_start) * 1000
@@ -190,6 +191,46 @@ class DatabaseConnection:
             f"MongoDB is unavailable — returning None (fallback mode)"
         )
         return None
+
+    @classmethod
+    async def ensure_indexes(cls) -> None:
+        """
+        Creates MongoDB indexes used by CRUD, pagination, search, prompt audit,
+        and token usage analytics. Safe to call repeatedly at startup.
+        """
+        if cls.db is None:
+            logger.warning("[DB Indexes] Skipped index creation because MongoDB is unavailable")
+            return
+
+        index_specs = {
+            settings.CONVERSATION_COLLECTION: [
+                ([("conversation_id", 1)], {"unique": True, "name": "uq_conversation_id"}),
+                ([("status", 1), ("created_at", -1)], {"name": "idx_status_created_at"}),
+                ([("created_at", -1)], {"name": "idx_created_at_desc"}),
+                ([("updated_at", -1)], {"name": "idx_updated_at_desc"}),
+            ],
+            settings.MESSAGE_COLLECTION: [
+                ([("message_id", 1)], {"unique": True, "name": "uq_message_id"}),
+                ([("conversation_id", 1), ("timestamp", 1)], {"name": "idx_conversation_timestamp"}),
+            ],
+            settings.PROMPT_LOG_COLLECTION: [
+                ([("prompt_id", 1)], {"unique": True, "name": "uq_prompt_id"}),
+                ([("conversation_id", 1), ("created_at", -1)], {"name": "idx_prompt_conversation_created"}),
+                ([("model", 1), ("created_at", -1)], {"name": "idx_prompt_model_created"}),
+            ],
+            settings.AI_USAGE_COLLECTION: [
+                ([("usage_id", 1)], {"unique": True, "name": "uq_usage_id"}),
+                ([("conversation_id", 1), ("timestamp", -1)], {"name": "idx_usage_conversation_timestamp"}),
+                ([("model", 1), ("timestamp", -1)], {"name": "idx_usage_model_timestamp"}),
+            ],
+        }
+
+        for collection_name, specs in index_specs.items():
+            collection = cls.db[collection_name]
+            for keys, options in specs:
+                await collection.create_index(keys, **options)
+
+        logger.info("[DB Indexes] MongoDB indexes verified for conversation storage")
 
     # ──────────────────────────────────────────────────────────────
     # Properties

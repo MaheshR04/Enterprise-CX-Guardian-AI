@@ -1,8 +1,14 @@
 from typing import List, Optional, Dict, Any
-from app.repositories.interfaces import IConversationRepository, IMessageRepository
+from app.repositories.interfaces import (
+    IConversationRepository,
+    IMessageRepository,
+    IPromptRepository,
+    IUsageRepository,
+)
 from app.repositories.factory import repository_factory
 from app.core.config import settings
 from app.core.logger import logger
+from app.utils.exceptions import DuplicateConversationIdException
 
 
 class MemoryService:
@@ -20,6 +26,8 @@ class MemoryService:
         self,
         conv_repo: IConversationRepository = None,
         msg_repo:  IMessageRepository = None,
+        prompt_repo: IPromptRepository = None,
+        usage_repo: IUsageRepository = None,
         max_history: int = None
     ):
         # Resolve from RepositoryFactory by default — interface-typed,
@@ -29,6 +37,12 @@ class MemoryService:
         )
         self._msg_repo: IMessageRepository = (
             msg_repo or repository_factory.get_message_repo()
+        )
+        self._prompt_repo: IPromptRepository = (
+            prompt_repo or repository_factory.get_prompt_repo()
+        )
+        self._usage_repo: IUsageRepository = (
+            usage_repo or repository_factory.get_usage_repo()
         )
         self._max_history: int = (
             max_history if max_history is not None else settings.MAX_HISTORY
@@ -48,6 +62,10 @@ class MemoryService:
         """
         import uuid
         cid = conversation_id or f"conv_{uuid.uuid4()}"
+
+        if await self._conv_repo.exists_any(cid):
+            raise DuplicateConversationIdException(cid)
+
         doc = await self._conv_repo.insert_one(
             conversation_id=cid,
             metadata=metadata
@@ -111,12 +129,26 @@ class MemoryService:
     # ==============================================================
     async def loadConversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         """
-        Retrieves a conversation header document from MongoDB.
+        Retrieves a conversation document from MongoDB with messages and telemetry.
         Returns None if the conversation does not exist.
         """
         conv = await self._conv_repo.find_by_id(conversation_id)
         if not conv:
             logger.info(f"[MemoryService] Conversation '{conversation_id}' not found in MongoDB")
+            return None
+
+        messages = await self._msg_repo.find_by_conversation_id(conversation_id)
+        prompt_stats = await self._prompt_repo.get_prompt_stats_by_conversation(conversation_id)
+        usage_summary = await self._usage_repo.sum_tokens_by_conversation_id(conversation_id)
+        latest_prompt = await self._prompt_repo.find_latest_by_conversation_id(conversation_id)
+        latest_usage = await self._usage_repo.find_latest_by_conversation_id(conversation_id)
+
+        conv["messages"] = messages
+        conv["message_count"] = len(messages)
+        conv["prompt_stats"] = prompt_stats
+        conv["usage_summary"] = usage_summary
+        conv["latest_prompt"] = latest_prompt
+        conv["latest_usage"] = latest_usage
         return conv
 
     # snake_case alias
@@ -227,7 +259,8 @@ class MemoryService:
                 "created_at":      conv.get("created_at"),
                 "updated_at":      conv.get("updated_at"),
                 "status":          conv.get("status", "active"),
-                "message_count":   msg_count
+                "message_count":   msg_count,
+                "metadata":        conv.get("metadata", {})
             })
 
         logger.info(
@@ -295,7 +328,8 @@ class MemoryService:
                 "created_at":      conv.get("created_at"),
                 "updated_at":      conv.get("updated_at"),
                 "status":          conv.get("status", "active"),
-                "message_count":   msg_count
+                "message_count":   msg_count,
+                "metadata":        conv.get("metadata", {})
             })
 
         logger.info(
@@ -415,6 +449,15 @@ class MemoryService:
 
     async def conversation_exists(self, conversation_id: str) -> bool:
         return await self.conversationExists(conversation_id)
+
+    async def conversationExistsAny(self, conversation_id: str) -> bool:
+        """
+        Checks whether a conversation exists in any lifecycle state.
+        """
+        return await self._conv_repo.exists_any(conversation_id)
+
+    async def conversation_exists_any(self, conversation_id: str) -> bool:
+        return await self.conversationExistsAny(conversation_id)
 
 
 memory_service = MemoryService()

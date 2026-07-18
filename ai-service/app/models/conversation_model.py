@@ -32,7 +32,7 @@ class ConversationModel(BaseModel):
     )
     status: str = Field(
         default="active",
-        description="Lifecycle state of the conversation. One of: active | closed | archived.",
+        description="Lifecycle state of the conversation. One of: active | archived | deleted.",
         example="active"
     )
     metadata: Optional[Dict[str, Any]] = Field(

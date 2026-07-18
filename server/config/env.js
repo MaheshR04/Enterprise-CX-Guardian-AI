@@ -34,3 +34,4 @@ export const PYTHON_AI_URL = process.env.PYTHON_AI_URL || 'http://localhost:8000
 export const AI_TIMEOUT = parseInt(process.env.AI_TIMEOUT || '30000', 10);
 export const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3', 10);
 export const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+export const STORAGE_BACKEND = process.env.STORAGE_BACKEND || 'memory';

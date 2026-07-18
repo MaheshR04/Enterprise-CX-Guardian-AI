@@ -65,6 +65,12 @@ class ConversationManager:
         """
         return await self._memory.conversationExists(conversation_id)
 
+    async def conversation_exists_any(self, conversation_id: str) -> bool:
+        """
+        Returns True if the conversation exists in any status, including deleted.
+        """
+        return await self._memory.conversationExistsAny(conversation_id)
+
     async def list_conversations(
         self,
         limit: int = 20,

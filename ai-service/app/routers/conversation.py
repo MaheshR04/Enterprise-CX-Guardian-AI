@@ -1,15 +1,72 @@
 from fastapi import APIRouter, Depends, Query, status
 from typing import Dict, Any, Optional
+from pydantic import BaseModel, Field
 from app.conversation.conversation_manager import conversation_manager, ConversationManager
-from app.utils.exceptions import ConversationNotFoundException, InvalidConversationIdException
+from app.utils.exceptions import (
+    ConversationNotFoundException,
+    InvalidConversationIdException,
+    InvalidStatusException,
+)
 from app.schemas.payload import ErrorResponse
 
 router = APIRouter()
 
 
+class CreateConversationRequest(BaseModel):
+    conversationId: Optional[str] = Field(
+        default=None,
+        description="Optional client-supplied conversation ID. Generated when omitted.",
+        example="conv_enterprise_demo_001"
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional enterprise metadata for channel, customer, source, or tenant context.",
+        example={"channel": "web", "customer_id": "cust_1001", "tenant": "enterprise"}
+    )
+
+
 def get_conversation_manager() -> ConversationManager:
     """Dependency injection provider for ConversationManager."""
     return conversation_manager
+
+
+# ======================================================================
+# POST /api/v1/conversations
+# ======================================================================
+@router.post(
+    "/",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Conversation",
+    description=(
+        "Creates a conversation header in MongoDB without sending a chat message. "
+        "Use POST /api/v1/chat with the returned conversation_id to continue it."
+    ),
+    responses={
+        201: {"description": "Conversation created successfully."},
+        400: {"model": ErrorResponse, "description": "Invalid Conversation ID."},
+        409: {"model": ErrorResponse, "description": "Conversation ID already exists."}
+    }
+)
+async def create_conversation(
+    payload: CreateConversationRequest,
+    mgr: ConversationManager = Depends(get_conversation_manager)
+) -> Dict[str, Any]:
+    """Creates a new MongoDB-backed conversation session."""
+    if payload.conversationId and len(payload.conversationId) > 128:
+        raise InvalidConversationIdException(
+            detail="Conversation ID must be a non-empty string under 128 characters."
+        )
+
+    conversation = await mgr.create_conversation(
+        conversation_id=payload.conversationId,
+        metadata=payload.metadata
+    )
+
+    return {
+        "success": True,
+        "message": "Conversation created successfully",
+        "data": conversation
+    }
 
 
 # ======================================================================
@@ -74,7 +131,7 @@ async def list_conversations(
 )
 async def search_conversations(
     conversationId: Optional[str] = Query(default=None, description="Partial case-insensitive match on conversationId."),
-    status_filter:  Optional[str] = Query(default=None, alias="status", description="Exact status match: active | closed | archived."),
+    status_filter:  Optional[str] = Query(default=None, alias="status", description="Exact status match: active | archived | deleted."),
     date_from:      Optional[str] = Query(default=None, description="ISO 8601 start date. e.g. 2026-07-01T00:00:00"),
     date_to:        Optional[str] = Query(default=None, description="ISO 8601 end date.   e.g. 2026-07-18T23:59:59"),
     limit:          int           = Query(default=20, ge=1, le=100, description="Documents per page."),
@@ -92,11 +149,9 @@ async def search_conversations(
         sort = "desc"
 
     # Validate status if provided
-    valid_statuses = {"active", "closed", "archived"}
+    valid_statuses = {"active", "archived", "deleted"}
     if status_filter and status_filter.lower() not in valid_statuses:
-        raise InvalidConversationIdException(
-            detail=f"Invalid status '{status_filter}'. Must be one of: active, closed, archived."
-        )
+        raise InvalidStatusException(status_filter)
 
     result = await mgr.search_conversations(
         conversation_id=conversationId,
@@ -137,7 +192,7 @@ async def search_conversations(
     summary="Get Conversation By ID",
     description=(
         "Retrieves a specific conversation session from MongoDB by conversationId, "
-        "including full metadata and status."
+        "including metadata, messages, prompt stats, and usage telemetry summary."
     ),
     responses={
         200: {"description": "Conversation retrieved successfully."},
@@ -293,4 +348,3 @@ async def restore_conversation(
             "status":          "active"
         }
     }
-

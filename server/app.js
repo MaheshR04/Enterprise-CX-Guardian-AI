@@ -8,8 +8,11 @@ import requestLogger from './middleware/requestLogger.js';
 import errorHandler from './middleware/errorHandler.js';
 import notFound from './middleware/notFound.js';
 import responseFormatter from './middleware/responseFormatter.js';
-import apiRouter from './routes/index.js';
 import { CLIENT_URL } from './config/index.js';
+import repositoryFactory from './repositories/repositoryFactory.js';
+
+await repositoryFactory.initialize();
+const { default: apiRouter } = await import('./routes/index.js');
 
 const app = express();
 

@@ -17,6 +17,7 @@ class Settings:
     MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
     DATABASE_NAME: str = os.getenv("DATABASE_NAME", os.getenv("DB_NAME", "cx_guardian_db"))
     DB_NAME: str = DATABASE_NAME
+    STORAGE_BACKEND: str = os.getenv("STORAGE_BACKEND", "mongodb")
     CONVERSATION_COLLECTION: str = os.getenv("CONVERSATION_COLLECTION", "conversations")
     MESSAGE_COLLECTION: str = os.getenv("MESSAGE_COLLECTION", "messages")
     PROMPT_LOG_COLLECTION: str = os.getenv("PROMPT_LOG_COLLECTION", "prompt_logs")

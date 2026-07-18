@@ -1,6 +1,6 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import ApiError from '../utils/ApiError.js';
-import aiService from '../services/ai.service.js';
+import chatService from '../services/chat.service.js';
 
 /**
  * @desc Process chat message and receive AI response
@@ -18,8 +18,7 @@ export const sendChatMessage = asyncHandler(async (req, res, next) => {
   const selectedConversationId = conversationId || conversation_id || 'conv_default_001';
   const selectedCustomerId = customerId || customer_id || 'cust_1001';
 
-  // 2. Call ai.service.js (Zero Axios calls directly in controller)
-  const aiResult = await aiService.chat({
+  const aiResult = await chatService.sendMessage({
     message: message.trim(),
     conversation_id: selectedConversationId,
     customer_id: selectedCustomerId
@@ -44,7 +43,7 @@ export const sendChatMessage = asyncHandler(async (req, res, next) => {
  * @access Public / Authenticated
  */
 export const getChatHealth = asyncHandler(async (req, res, next) => {
-  const healthData = await aiService.health();
+  const healthData = await chatService.getHealth();
 
   if (res.ok) {
     return res.ok(healthData, 'Chat AI service status retrieved successfully');
@@ -64,20 +63,7 @@ export const getChatHealth = asyncHandler(async (req, res, next) => {
  * @access Public / Authenticated
  */
 export const getChatHistory = asyncHandler(async (req, res, next) => {
-  const historyData = [
-    {
-      id: 'msg_101',
-      sender: 'user',
-      text: 'Hello, I need help with my enterprise subscription refund.',
-      timestamp: new Date(Date.now() - 600000).toISOString()
-    },
-    {
-      id: 'msg_102',
-      sender: 'ai_agent',
-      text: 'Hello from AI Service! I can assist you with your refund inquiry.',
-      timestamp: new Date(Date.now() - 580000).toISOString()
-    }
-  ];
+  const historyData = await chatService.getHistory();
 
   if (res.ok) {
     return res.ok(historyData, 'Chat history retrieved successfully');

@@ -1,10 +1,10 @@
-# Enterprise CX Guardian AI
+#  AI MicroService
 
 Enterprise CX Guardian AI is a state-of-the-art real-time safety navigation and emergency response platform.
 
 ## Repository Structure
 ```text
-Enterprise-CX-Guardian-AI/
+ AI MicroService/
 │
 ├── client/              # React frontend (Vite-powered)
 ├── server/              # Express backend (Modular MVC, Socket.IO & MongoDB)

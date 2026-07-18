@@ -13,6 +13,12 @@ class AIUsageModel(BaseModel):
     performance monitoring, and future billing integration.
     """
 
+    usage_id: str = Field(
+        ...,
+        alias="usageId",
+        description="Unique UUID identifying this usage telemetry record.",
+        example="usg_1a2b3c4d-1234-5678-abcd-ef0123456789"
+    )
     conversation_id: str = Field(
         ...,
         alias="conversationId",
@@ -69,6 +75,7 @@ class AIUsageModel(BaseModel):
         json_schema_extra = {
             "example": {
                 "conversationId": "conv_7a8b9c0d-1234-5678-abcd-ef0123456789",
+                "usageId": "usg_1a2b3c4d-1234-5678-abcd-ef0123456789",
                 "model": "llama3-70b-8192",
                 "promptTokens": 120,
                 "completionTokens": 80,

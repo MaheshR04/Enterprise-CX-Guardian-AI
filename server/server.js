@@ -4,8 +4,13 @@ import { Server } from 'socket.io';
 import * as config from './config/index.js';
 import { connectDatabase, disconnectDatabase } from './database/connection.js';
 
-// Connect Database
-connectDatabase();
+const usesMongoStorage = config.STORAGE_BACKEND.toLowerCase() === 'mongodb';
+
+if (usesMongoStorage) {
+  await connectDatabase();
+} else {
+  console.log(`[Database] Skipping MongoDB connection for storage backend: ${config.STORAGE_BACKEND}`);
+}
 
 // Create HTTP server
 const server = http.createServer(app);
@@ -41,7 +46,9 @@ const handleShutdown = (signal) => {
     console.log('[Server] HTTP and Socket.IO servers closed.');
     
     try {
-      await disconnectDatabase();
+      if (usesMongoStorage) {
+        await disconnectDatabase();
+      }
       console.log('[Server] Graceful shutdown completed. Exiting.');
       process.exit(0);
     } catch (err) {
