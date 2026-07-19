@@ -1,10 +1,21 @@
-# Dependency directories
+# Dependency & Environment directories
 node_modules/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
 
 # Production builds
 dist/
 build/
 out/
+
+# Log & audit files
+logs/
+*.log
+*.log*
 
 # Environment files
 .env
@@ -22,12 +33,7 @@ out/
 *.sln
 *.swp
 
-# Debug logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Coverage directory
+# Coverage & pytest
 coverage/
+.pytest_cache/
+coverage.xml

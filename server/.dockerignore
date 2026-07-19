@@ -1,0 +1,11 @@
+# server/.dockerignore
+node_modules
+logs
+.env
+.env.local
+*.log
+.DS_Store
+.vscode
+.git
+README.md
+uploads

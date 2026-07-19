@@ -12,6 +12,26 @@ class DashboardService {
   async getSummary() {
     return this.repository.getSummary();
   }
+
+  async getSystemHealth() {
+    return this.repository.getSystemHealth();
+  }
+
+  async getModelUsage() {
+    return this.repository.getModelUsage();
+  }
+
+  async getConversationAnalytics() {
+    return this.repository.getConversationAnalytics();
+  }
+
+  async getUserAnalytics() {
+    return this.repository.getUserAnalytics();
+  }
+
+  async getDocumentAnalytics() {
+    return this.repository.getDocumentAnalytics();
+  }
 }
 
 export default new DashboardService();

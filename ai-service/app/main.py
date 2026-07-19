@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.logger import logger, log_unexpected_error, log_error, log_validation_error
+from app.core.metrics import metrics
 from app.database.connection import db_connection
 from app.repositories.factory import RepositoryFactory
 from app.utils.response import error_response
@@ -33,7 +34,24 @@ from app.utils.exceptions import (
     LLMTimeoutException,
 )
 from app.middleware.logging_middleware import RequestLoggingMiddleware
-from app.routers import health_router, api_v1_router
+from app.middleware.security import (
+    SecureHeadersMiddleware,
+    RateLimitMiddleware,
+    RequestSizeLimitMiddleware,
+    InputSanitizationMiddleware,
+    validate_environment,
+    get_cors_config
+)
+from app.middleware.performance import (
+    CacheMiddleware,
+    GZipMiddleware,
+    task_queue
+)
+from app.routers import health_router
+from app.routers.version_router import api_router, register_all_versions
+
+# Validate environment variables at import/boot
+validate_environment()
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -57,11 +75,16 @@ async def lifespan(app: FastAPI):
         f"[Startup] Storage backend: '{RepositoryFactory.get_active_backend()}' — "
         f"Clean Architecture layer active"
     )
+    # 3. Register all API versions
+    register_all_versions()
+    # 4. Start background task queue
+    await task_queue.start()
     yield
     # ── Shutdown ──────────────────────────────────────────────────
     logger.info("=" * 60)
     logger.info(f"  Shutting down {settings.PROJECT_NAME}")
     logger.info("=" * 60)
+    await task_queue.stop()
     await db_connection.close_connection()
 
 
@@ -142,16 +165,37 @@ A production-ready, MongoDB-backed conversational AI platform built with:
 # Middleware
 # ══════════════════════════════════════════════════════════════════
 
-# Request & Response latency logging
+# ── 1. Secure HTTP Headers (Helmet equivalent) ───────────────────
+app.add_middleware(SecureHeadersMiddleware)
+
+# ── 2. Response Compression (GZip > 512 bytes) ─────────────────────
+app.add_middleware(GZipMiddleware, minimum_size=512)
+
+# ── 3. HTTP Response Caching (ETag + 304 support) ──────────────────
+app.add_middleware(CacheMiddleware)
+
+# ── 4. Request Size Limit (Payload size guard) ────────────────────
+app.add_middleware(RequestSizeLimitMiddleware)
+
+# ── 5. Input Sanitization (Null-byte & XSS strip) ────────────────
+app.add_middleware(InputSanitizationMiddleware)
+
+# ── 6. Per-IP Sliding Window Rate Limiting ────────────────────────
+app.add_middleware(RateLimitMiddleware)
+
+# ── 7. Request & Response Latency Logging ─────────────────────────
 app.add_middleware(RequestLoggingMiddleware)
 
-# CORS
+# ── 8. Environment-aware CORS ──────────────────────────────────────
+cors_cfg = get_cors_config()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=cors_cfg["allow_origins"],
+    allow_credentials=cors_cfg["allow_credentials"],
+    allow_methods=cors_cfg["allow_methods"],
+    allow_headers=cors_cfg["allow_headers"],
+    expose_headers=cors_cfg["expose_headers"],
+    max_age=cors_cfg["max_age"],
 )
 
 
@@ -166,6 +210,8 @@ async def base_app_exception_handler(request: Request, exc: BaseAppException):
         context=f"{request.method} {request.url.path}",
         error=exc
     )
+    import asyncio
+    asyncio.ensure_future(metrics.record_error(exc.error_code))
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -307,6 +353,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         value="(request body)",
         reason=error_detail
     )
+    import asyncio
+    asyncio.ensure_future(metrics.record_error("VALIDATION_ERROR"))
     return JSONResponse(
         status_code=422,
         content={
@@ -325,6 +373,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         context=f"{request.method} {request.url.path}",
         error=exc
     )
+    import asyncio
+    asyncio.ensure_future(metrics.record_error(f"HTTP_{exc.status_code}"))
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -343,6 +393,8 @@ async def global_exception_handler(request: Request, exc: Exception):
         context=f"{request.method} {request.url.path}",
         error=exc
     )
+    import asyncio
+    asyncio.ensure_future(metrics.record_error("INTERNAL_SERVER_ERROR"))
     return JSONResponse(
         status_code=500,
         content={
@@ -358,8 +410,9 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Router Registration
 # ══════════════════════════════════════════════════════════════════
 
-# Health Check — GET / and GET /health
+# Health Check — GET / and GET /health (public, no version prefix)
 app.include_router(health_router, tags=["Health"])
 
-# API v1 — /api/v1/chat, /api/v1/conversations
-app.include_router(api_v1_router, prefix="/api/v1")
+# Versioned API — /api/v1/... and future /api/v2/...
+# Also exposes GET /api/versions for version discovery
+app.include_router(api_router, prefix="/api")

@@ -66,4 +66,24 @@ export class DashboardRepository extends RepositoryInterface {
   async getSummary() {
     this.notImplemented('getSummary');
   }
+
+  async getSystemHealth() {
+    this.notImplemented('getSystemHealth');
+  }
+
+  async getModelUsage() {
+    this.notImplemented('getModelUsage');
+  }
+
+  async getConversationAnalytics() {
+    this.notImplemented('getConversationAnalytics');
+  }
+
+  async getUserAnalytics() {
+    this.notImplemented('getUserAnalytics');
+  }
+
+  async getDocumentAnalytics() {
+    this.notImplemented('getDocumentAnalytics');
+  }
 }

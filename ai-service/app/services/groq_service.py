@@ -2,8 +2,8 @@ import time
 import groq
 from groq import Groq
 import httpx
-from app.config import settings
-from app.utils.logger import logger, log_ai_call
+from app.core.config import settings
+from app.core.logger import logger, log_ai_call
 
 class GroqService:
     """

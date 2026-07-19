@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: cx-guardian-ai-service
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --loop uvloop --http httptools
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: GROQ_API_KEY
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: DATABASE_NAME
+        value: cx_guardian_db
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: MODEL_NAME
+        value: llama3-70b-8192

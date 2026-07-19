@@ -1,46 +1,94 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import morgan from 'morgan';
-import cookieParser from 'cookie-parser';
-import requestLogger from './middleware/requestLogger.js';
-import errorHandler from './middleware/errorHandler.js';
-import notFound from './middleware/notFound.js';
+import express      from 'express';
+import cookieParser  from 'cookie-parser';
+
+// ── Security middleware ────────────────────────────────────────────
+import {
+  helmetConfig,
+  corsConfig,
+  generalLimiter,
+  sanitizeInputs,
+  validateEnvironment,
+  REQUEST_SIZE_LIMITS
+} from './middleware/security.js';
+
+// ── Performance middleware ─────────────────────────────────────────
+import {
+  compressionConfig,
+  cacheMiddleware,
+  ensureIndexes,
+  taskQueue
+} from './middleware/performance.js';
+
+// ── Core middleware ────────────────────────────────────────────────
+import requestLogger    from './middleware/requestLogger.js';
+import errorHandler     from './middleware/errorHandler.js';
+import notFound         from './middleware/notFound.js';
 import responseFormatter from './middleware/responseFormatter.js';
-import { CLIENT_URL } from './config/index.js';
+
+import logger           from './config/logger.js';
 import repositoryFactory from './repositories/repositoryFactory.js';
 
-await repositoryFactory.initialize();
-const { default: apiRouter } = await import('./routes/index.js');
+// ── Validate required environment variables at boot ────────────────
+validateEnvironment();
 
+// ── Initialize repository factory ─────────────────────────────────
+await repositoryFactory.initialize();
+
+// ── Versioned API router ───────────────────────────────────────────
+const { default: versionRouter } = await import('./routes/versionRouter.js');
+
+// ══════════════════════════════════════════════════════════════════
+// Express App
+// ══════════════════════════════════════════════════════════════════
 const app = express();
 
-// Security Middlewares
-app.use(helmet());
-app.use(cors({
-  origin: CLIENT_URL,
-  credentials: true
-}));
+// ── 1. Security: Helmet (secure headers) ─────────────────────────
+app.use(helmetConfig);
 
-// Performance & Parsing Middlewares
-app.use(compression());
+// ── 2. Security: CORS ────────────────────────────────────────────
+app.use(corsConfig);
+
+// ── 3. Performance: Compression (gzip/deflate) ───────────────────
+app.use(compressionConfig);
+
+// ── 4. Parsing with size limits ──────────────────────────────────
+app.use(express.json({ limit: REQUEST_SIZE_LIMITS.json }));
+app.use(express.urlencoded({ extended: true, limit: REQUEST_SIZE_LIMITS.urlencoded }));
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+// ── 5. Security: Input sanitization ─────────────────────────────
+app.use(sanitizeInputs);
+
+// ── 6. Security: Global rate limiting ───────────────────────────
+app.use(generalLimiter);
+
+// ── 7. Performance: HTTP cache (ETag + conditional) ─────────────
+app.use(cacheMiddleware);
+
+// ── 8. Response helpers & logging ────────────────────────────────
 app.use(responseFormatter);
 
-// Loggers
-app.use(morgan('dev'));
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    res.setHeader('X-Response-Time', `${ms}ms`);
+    logger.http.request(req.method, req.originalUrl, res.statusCode, ms);
+  });
+  next();
+});
+
 app.use(requestLogger);
 
-// Route Gateway Dispatcher
-app.use('/api/v1', apiRouter);
+// ── 9. Route dispatching ─────────────────────────────────────────
+// /api/v1/*, /api/v2/*, /api/versions
+app.use('/api', versionRouter);
 
-// 404 Route Handler
+// ── 10. Error handlers ───────────────────────────────────────────
 app.use(notFound);
-
-// Centralized Error Handler
 app.use(errorHandler);
 
+logger.info('[App] Express application configured with security + performance stack');
+
 export default app;
+export { ensureIndexes, taskQueue };

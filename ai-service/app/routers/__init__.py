@@ -7,11 +7,14 @@ from app.routers.sentiment import router as sentiment_router
 from app.routers.recommendation import router as recommendation_router
 from app.routers.analyze import router as analyze_router
 
+from app.routers.dashboard import router as dashboard_router
+
 __all__ = [
     "api_v1_router",
     "health_router",
     "auth_router",
     "chat_router",
+    "dashboard_router",
     "reasoning_router",
     "sentiment_router",
     "recommendation_router",

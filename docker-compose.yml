@@ -1,0 +1,210 @@
+# ══════════════════════════════════════════════════════════════════
+# docker-compose.yml — Enterprise CX Guardian AI
+# One-command startup: docker compose up --build
+#
+# Services:
+#   mongo      — MongoDB 7 (persistent storage)
+#   ai-service — FastAPI Python AI Microservice  :8000
+#   server     — Node.js / Express Backend       :5000
+#   client     — React + Vite / nginx Frontend   :80
+#
+# Networks:
+#   cx-backend  — Internal network (mongo ↔ ai-service ↔ server)
+#   cx-frontend — Edge network (server ↔ client)
+# ══════════════════════════════════════════════════════════════════
+
+version: "3.9"
+
+# ── Named volumes ─────────────────────────────────────────────────
+volumes:
+  mongo-data:
+    driver: local
+  ai-service-logs:
+    driver: local
+  server-logs:
+    driver: local
+
+# ── Networks ──────────────────────────────────────────────────────
+networks:
+  cx-backend:
+    driver: bridge
+    name: cx-backend
+  cx-frontend:
+    driver: bridge
+    name: cx-frontend
+
+# ══════════════════════════════════════════════════════════════════
+# Services
+# ══════════════════════════════════════════════════════════════════
+services:
+
+  # ── 1. MongoDB Atlas-compatible local instance ─────────────────
+  mongo:
+    image: mongo:7.0
+    container_name: cx-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-secret}
+      MONGO_INITDB_DATABASE: ${DATABASE_NAME:-cx_guardian_db}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    networks:
+      - cx-backend
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── 2. FastAPI AI Microservice ─────────────────────────────────
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+      target: production
+    container_name: cx-ai-service
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      PORT: 8000
+      HOST: 0.0.0.0
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      # MongoDB — uses internal Docker network hostname
+      MONGODB_URI: mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-secret}@mongo:27017/${DATABASE_NAME:-cx_guardian_db}?authSource=admin
+      DATABASE_NAME: ${DATABASE_NAME:-cx_guardian_db}
+      STORAGE_BACKEND: mongodb
+      CONVERSATION_COLLECTION: conversations
+      MESSAGE_COLLECTION: messages
+      PROMPT_LOG_COLLECTION: prompt_logs
+      AI_USAGE_COLLECTION: ai_usage
+
+      # Groq AI
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      MODEL_NAME: ${MODEL_NAME:-llama3-70b-8192}
+      TEMPERATURE: ${TEMPERATURE:-0.2}
+      MAX_TOKENS: ${MAX_TOKENS:-1024}
+      MAX_HISTORY: ${MAX_HISTORY:-10}
+      MAX_CONVERSATIONS: ${MAX_CONVERSATIONS:-100}
+      AUTO_DELETE_EMPTY: ${AUTO_DELETE_EMPTY:-True}
+
+      # JWT (shared secret with Node backend)
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+
+      # Node Backend internal URL
+      NODE_BACKEND_URL: http://server:5000
+    ports:
+      - "${AI_SERVICE_PORT:-8000}:8000"
+    volumes:
+      - ai-service-logs:/app/logs
+    networks:
+      - cx-backend
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ── 3. Node.js / Express Backend ──────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: production
+    container_name: cx-server
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${ENVIRONMENT:-production}
+      PORT: 5000
+
+      # MongoDB — internal Docker hostname
+      MONGO_URI: mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD:-secret}@mongo:27017/${DATABASE_NAME:-cx_guardian_db}?authSource=admin
+      STORAGE_BACKEND: mongodb
+
+      # JWT (same secret as AI service)
+      JWT_SECRET: ${JWT_SECRET_KEY}
+
+      # AI Microservice internal URL
+      PYTHON_AI_URL: http://ai-service:8000
+      AI_TIMEOUT: ${AI_TIMEOUT:-30000}
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+
+      # CORS — public frontend URL
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:80}
+    ports:
+      - "${SERVER_PORT:-5000}:5000"
+    volumes:
+      - server-logs:/app/logs
+    networks:
+      - cx-backend
+      - cx-frontend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ── 4. React + Vite Frontend (nginx) ──────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      target: production
+      args:
+        # Injected at BUILD TIME — Vite bakes these into the JS bundle
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:5000}
+    container_name: cx-client
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    ports:
+      - "${CLIENT_PORT:-80}:80"
+    networks:
+      - cx-frontend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"

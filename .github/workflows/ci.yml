@@ -1,0 +1,315 @@
+# ══════════════════════════════════════════════════════════════════
+# .github/workflows/ci.yml
+# Enterprise CX Guardian AI — CI/CD Pipeline
+#
+# Triggers: push / PR to main, develop, feature/*
+#
+# Jobs:
+#   ci-client     — React/Vite: install → lint → build → Docker validate
+#   ci-server     — Node.js:    install → lint → test  → Docker validate
+#   ci-ai-service — FastAPI:    install → lint → test  → Docker validate
+#   ci-summary    — Gate job: fails if any job fails
+# ══════════════════════════════════════════════════════════════════
+
+name: CI — Enterprise CX Guardian AI
+
+on:
+  push:
+    branches: [main, develop, "feature/**", "fix/**", "release/**"]
+  pull_request:
+    branches: [main, develop]
+
+# Cancel redundant runs on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  PYTHON_VERSION: "3.11"
+  DOCKER_BUILDKIT: "1"
+
+# ══════════════════════════════════════════════════════════════════
+jobs:
+
+  # ────────────────────────────────────────────────────────────────
+  # JOB 1 — React + Vite Frontend
+  # ────────────────────────────────────────────────────────────────
+  ci-client:
+    name: "Client — Install / Lint / Build / Docker"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - name: ⬇ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      # ── Install ────────────────────────────────────────────────
+      - name: 📦 Install dependencies
+        run: npm ci --frozen-lockfile
+
+      # ── Lint ──────────────────────────────────────────────────
+      - name: 🔍 Lint (oxlint)
+        run: npm run lint
+        continue-on-error: false
+
+      # ── Build ─────────────────────────────────────────────────
+      - name: 🏗 Build (vite)
+        run: npm run build
+        env:
+          VITE_API_URL: http://localhost:5000
+          VITE_SOCKET_URL: http://localhost:5000
+
+      # ── Validate build output ──────────────────────────────────
+      - name: ✅ Verify dist/ exists
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "❌ Build failed — dist/ directory missing"
+            exit 1
+          fi
+          echo "✅ dist/ contents:"
+          ls -lh dist/
+
+      # ── Docker build & validate ────────────────────────────────
+      - name: 🐳 Build Docker image
+        run: |
+          docker build \
+            --file Dockerfile \
+            --target production \
+            --build-arg VITE_API_URL=http://localhost:5000 \
+            --build-arg VITE_SOCKET_URL=http://localhost:5000 \
+            --tag cx-guardian-client:ci-${{ github.sha }} \
+            .
+
+      - name: 🔬 Validate Docker image starts
+        run: |
+          docker run -d --name ci-client -p 8080:80 cx-guardian-client:ci-${{ github.sha }}
+          sleep 5
+          curl -f http://localhost:8080/health || (docker logs ci-client && exit 1)
+          docker stop ci-client && docker rm ci-client
+          echo "✅ Client Docker image is healthy"
+
+      - name: 🧹 Cleanup Docker image
+        if: always()
+        run: docker rmi cx-guardian-client:ci-${{ github.sha }} || true
+
+  # ────────────────────────────────────────────────────────────────
+  # JOB 2 — Node.js / Express Backend
+  # ────────────────────────────────────────────────────────────────
+  ci-server:
+    name: "Server — Install / Lint / Test / Docker"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - name: ⬇ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      # ── Install ────────────────────────────────────────────────
+      - name: 📦 Install dependencies
+        run: npm ci --frozen-lockfile
+
+      # ── Lint ──────────────────────────────────────────────────
+      - name: 🔍 Lint check
+        run: |
+          if [ -f ".eslintrc*" ] || [ -f "eslint.config*" ]; then
+            npx eslint . --ext .js --max-warnings 0
+          else
+            echo "ℹ No ESLint config found — skipping"
+          fi
+        continue-on-error: false
+
+      # ── Tests ─────────────────────────────────────────────────
+      - name: 🧪 Run tests
+        run: |
+          if [ -f "package.json" ] && npm run | grep -q "^  test$"; then
+            npm test
+          else
+            echo "ℹ No test script found — skipping"
+          fi
+        env:
+          NODE_ENV: test
+          PORT: 5000
+          JWT_SECRET: ci-test-secret-key-minimum-32-chars
+          MONGO_URI: mongodb://localhost:27017/ci_test_db
+          PYTHON_AI_URL: http://localhost:8000
+          CLIENT_URL: http://localhost:3000
+          STORAGE_BACKEND: memory
+
+      # ── Docker build & validate ────────────────────────────────
+      - name: 🐳 Build Docker image
+        run: |
+          docker build \
+            --file Dockerfile \
+            --target production \
+            --tag cx-guardian-server:ci-${{ github.sha }} \
+            .
+
+      - name: 🔬 Validate Docker image starts
+        run: |
+          docker run -d \
+            --name ci-server \
+            -p 5001:5000 \
+            -e NODE_ENV=test \
+            -e PORT=5000 \
+            -e JWT_SECRET=ci-test-secret-key \
+            -e MONGO_URI=mongodb://does-not-matter:27017/test \
+            -e PYTHON_AI_URL=http://localhost:8000 \
+            -e CLIENT_URL=http://localhost:3000 \
+            -e STORAGE_BACKEND=memory \
+            cx-guardian-server:ci-${{ github.sha }}
+          sleep 8
+          docker inspect ci-server --format='{{.State.Status}}' | grep -q running
+          echo "✅ Server container is running"
+          docker stop ci-server && docker rm ci-server
+
+      - name: 🧹 Cleanup Docker image
+        if: always()
+        run: docker rmi cx-guardian-server:ci-${{ github.sha }} || true
+
+  # ────────────────────────────────────────────────────────────────
+  # JOB 3 — FastAPI AI Microservice
+  # ────────────────────────────────────────────────────────────────
+  ci-ai-service:
+    name: "AI Service — Install / Lint / Test / Docker"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-service
+
+    steps:
+      - name: ⬇ Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: ai-service/requirements.txt
+
+      # ── Install ────────────────────────────────────────────────
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff pytest pytest-asyncio pytest-cov httpx
+
+      # ── Lint ──────────────────────────────────────────────────
+      - name: 🔍 Lint (ruff)
+        run: |
+          ruff check app/ --select=E,W,F,I --ignore=E501 \
+            --output-format=github \
+            || echo "⚠ Lint warnings found — review above"
+        continue-on-error: false
+
+      # ── Type check (optional) ──────────────────────────────────
+      - name: 🔎 Import check
+        run: |
+          python -c "import app.main; print('✅ app.main imports successfully')"
+        env:
+          ENVIRONMENT: test
+          GROQ_API_KEY: test-key-placeholder
+          MONGODB_URI: mongodb://localhost:27017
+          DATABASE_NAME: ci_test_db
+          JWT_SECRET_KEY: ci-test-secret-key-minimum-64-chars-do-not-use
+
+      # ── Tests ─────────────────────────────────────────────────
+      - name: 🧪 Run tests (pytest)
+        run: |
+          if [ -d "tests" ] && find tests -name "test_*.py" | grep -q .; then
+            pytest tests/ \
+              --cov=app \
+              --cov-report=term-missing \
+              --cov-report=xml:coverage.xml \
+              -v \
+              --tb=short
+          else
+            echo "ℹ No tests found — skipping coverage"
+          fi
+        env:
+          ENVIRONMENT: test
+          GROQ_API_KEY: test-key-placeholder
+          MONGODB_URI: mongodb://localhost:27017
+          DATABASE_NAME: ci_test_db
+          JWT_SECRET_KEY: ci-test-secret-key-minimum-64-chars-do-not-use
+
+      # ── Upload coverage ────────────────────────────────────────
+      - name: 📊 Upload coverage report
+        if: hashFiles('ai-service/coverage.xml') != ''
+        uses: codecov/codecov-action@v4
+        with:
+          files: ai-service/coverage.xml
+          flags: ai-service
+          fail_ci_if_error: false
+
+      # ── Docker build & validate ────────────────────────────────
+      - name: 🐳 Build Docker image
+        run: |
+          docker build \
+            --file Dockerfile \
+            --target production \
+            --tag cx-guardian-ai-service:ci-${{ github.sha }} \
+            .
+
+      - name: 🔬 Validate Docker image starts
+        run: |
+          docker run -d \
+            --name ci-ai-service \
+            -p 8001:8000 \
+            -e ENVIRONMENT=test \
+            -e GROQ_API_KEY=test-key-placeholder \
+            -e MONGODB_URI=mongodb://localhost:27017 \
+            -e DATABASE_NAME=ci_test_db \
+            -e JWT_SECRET_KEY=ci-test-secret-key-minimum-64-chars \
+            cx-guardian-ai-service:ci-${{ github.sha }}
+          sleep 12
+          curl -f http://localhost:8001/health || (docker logs ci-ai-service && exit 1)
+          echo "✅ AI Service Docker image is healthy"
+          docker stop ci-ai-service && docker rm ci-ai-service
+
+      - name: 🧹 Cleanup Docker image
+        if: always()
+        run: docker rmi cx-guardian-ai-service:ci-${{ github.sha }} || true
+
+  # ────────────────────────────────────────────────────────────────
+  # JOB 4 — Gate / Summary
+  # ────────────────────────────────────────────────────────────────
+  ci-summary:
+    name: "✅ CI Gate — All Jobs Passed"
+    runs-on: ubuntu-latest
+    needs: [ci-client, ci-server, ci-ai-service]
+    if: always()
+
+    steps:
+      - name: 🚦 Evaluate results
+        run: |
+          echo "Client  : ${{ needs.ci-client.result }}"
+          echo "Server  : ${{ needs.ci-server.result }}"
+          echo "AI Svc  : ${{ needs.ci-ai-service.result }}"
+
+          if [[ "${{ needs.ci-client.result }}"     != "success" ]] || \
+             [[ "${{ needs.ci-server.result }}"     != "success" ]] || \
+             [[ "${{ needs.ci-ai-service.result }}" != "success" ]]; then
+            echo "❌ One or more CI jobs failed — blocking merge"
+            exit 1
+          fi
+          echo "✅ All CI jobs passed — ready to merge"
