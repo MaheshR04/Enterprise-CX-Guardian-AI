@@ -1,118 +1,174 @@
-# Enterprise CX Guardian AI — System Architecture & Design Documentation
+# Enterprise CX Guardian AI — Comprehensive System Architecture & Design Specification
 
-## 1. High-Level System Architecture Diagram
+This document contains full Mermaid architectural diagrams illustrating system topology, microservice communication, security authentication workflows, AI chat execution, RAG knowledge retrieval, database schemas, and monorepo structure.
+
+---
+
+## 1. System Architecture Diagram
 
 ```mermaid
 flowchart TB
     subgraph ClientLayer ["Client Layer (Edge)"]
-        UI["React + Vite Single Page App\n(Port 80 / nginx)"]
+        UI["React 18 + Vite SPA\n(Port 80 / nginx)\n- Theme Provider\n- Toast Notifications\n- Skeleton Loaders"]
     end
 
     subgraph GatewayLayer ["Gateway & Node.js Backend"]
-        NodeServer["Node.js Express Server\n(Port 5000)\n- Auth Guard\n- Rate Limiter\n- Repository Factory"]
+        NodeServer["Node.js Express Server\n(Port 5000)\n- Helmet & CORS Security\n- Sliding-Window Rate Limiter\n- Version Router (/api/v1, /api/v2)\n- Repository Factory"]
     end
 
     subgraph AIServiceLayer ["Python AI Microservice"]
-        FastAPI["FastAPI App\n(Port 8000)\n- Groq AI Engine\n- Sliding Context Window\n- Metrics & Health Collector"]
-        RepoFactory["Repository Factory\n(Clean Architecture Interface)"]
+        FastAPI["FastAPI App\n(Port 8000)\n- Groq AI LLM Engine\n- Sliding History Window\n- In-Memory ETag Cache\n- Metrics & System Health Collector"]
+        RepoFactory["Repository Factory\n(Clean Architecture Storage Layer)"]
     end
 
     subgraph ExternalServices ["AI Model Infrastructure"]
-        Groq["Groq Cloud API\n(llama3-70b-8192)"]
+        Groq["Groq Cloud API\n(llama3-70b-8192)\n- Sub-100ms Inference"]
     end
 
-    subgraph DataStore ["Persistence Layer"]
-        MongoDB[("MongoDB 7.0 Cluster\n- conversations\n- messages\n- prompt_logs\n- ai_usage")]
+    subgraph PersistenceLayer ["Database & Caching"]
+        MongoDB[("MongoDB 7.0 Cluster\n- conversations\n- messages\n- prompt_logs\n- ai_usage\n- users\n- refresh_tokens")]
     end
 
     UI -->|HTTPS / REST API| NodeServer
     NodeServer -->|Internal HTTP Proxy| FastAPI
     FastAPI -->|Motor Async Driver| MongoDB
-    NodeServer -->|Mongoose / Driver| MongoDB
+    NodeServer -->|Mongoose / Native Driver| MongoDB
     FastAPI -->|Async HTTPS| Groq
     FastAPI --- RepoFactory
 ```
 
 ---
 
-## 2. End-to-End Chat Execution Sequence Diagram
+## 2. Microservice Flow Diagram
+
+```mermaid
+flowchart LR
+    subgraph Frontend ["Edge Frontend"]
+        SPA["React SPA"]
+    end
+
+    subgraph BackendGateway ["Express Node Gateway"]
+        AuthMw["JWT Guard"]
+        VRouter["Version Router (/api/v1)"]
+        CacheMw["LRU ETag Cache"]
+        ProxyModule["Axios AI Proxy"]
+    end
+
+    subgraph AIMicroservice ["FastAPI AI Service"]
+        SecMw["Security & Rate Limiter"]
+        PerfMw["GZip & ETag Middleware"]
+        LLMEngine["Groq AIServiceManager"]
+        RepoFactory["RepositoryFactory"]
+    end
+
+    subgraph Persistence ["MongoDB Storage"]
+        Colls[("Conversations\nMessages\nPrompt Logs\nUsage Telemetry")]
+    end
+
+    SPA -->|1. Request| AuthMw
+    AuthMw --> VRouter
+    VRouter --> CacheMw
+    CacheMw -->|Miss| ProxyModule
+    ProxyModule -->|2. HTTP Proxy| SecMw
+    SecMw --> PerfMw
+    PerfMw --> LLMEngine
+    LLMEngine --> RepoFactory
+    RepoFactory -->|3. Persist / Fetch| Colls
+    LLMEngine -->|4. Groq Inference| Groq[Groq LLaMA-3]
+    Groq -->|5. Token Stream| LLMEngine
+    LLMEngine -->|6. JSON Response| SPA
+```
+
+---
+
+## 3. Authentication & JWT Authorization Flow Diagram
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User
-    participant Client as React SPA (Client)
-    participant Server as Node.js Backend (:5000)
-    participant AISvc as FastAPI AI Microservice (:8000)
-    participant Repo as Repository Layer
-    participant Mongo as MongoDB Atlas
-    participant Groq as Groq AI (LLaMA-3)
+    actor Client as User / Client
+    participant Express as Node Gateway (:5000)
+    participant AuthService as AuthService
+    participant UserRepo as UserRepository
+    participant TokenRepo as RefreshTokenRepository
+    participant DB as MongoDB
 
-    User->>Client: Submit message ("How do I reset my password?")
-    Client->>Server: POST /api/v1/chat { conversationId, message }
-    Note over Server: Security Check: Rate Limit, Cors & Body Validation
-    Server->>AISvc: Proxy POST /api/v1/chat with JWT & Payload
-    Note over AISvc: Middleware: Sanitize input & record request start
-    AISvc->>Repo: Get Conversation History (Last N turns)
-    Repo->>Mongo: find({ conversation_id, status: "ACTIVE" })
-    Mongo-->>Repo: Return message history
-    Repo-->>AISvc: Formatted context messages
-    AISvc->>AISvc: Build System Prompt & Append History
-    AISvc->>Groq: POST /chat/completions (llama3-70b-8192)
-    Groq-->>AISvc: Return AI Response + Token Usage
-    AISvc->>Repo: Persist User Msg, Assistant Msg & AI Usage Telemetry
-    Repo->>Mongo: bulkWrite([insert user, insert assistant, insert usage])
-    Mongo-->>Repo: Acknowledge Write
-    AISvc-->>Server: JSON { reply, model, usage, processingTime }
-    Server-->>Client: HTTP 200 { success: true, data: {...} }
-    Client-->>User: Render AI Response in Chat UI
+    Client->>Express: POST /api/v1/auth/login { email, password }
+    Express->>AuthService: login_user(email, password)
+    AuthService->>UserRepo: find_by_email(email)
+    UserRepo->>DB: findOne({ email })
+    DB-->>UserRepo: Return UserRecord
+    AuthService->>AuthService: Verify bcrypt password hash
+    AuthService->>AuthService: Issue Access JWT (60m) & Refresh JWT (7d)
+    AuthService->>TokenRepo: save_refresh_token(hashedToken, userId)
+    TokenRepo->>DB: insertOne({ token_hash, user_id, expires_at })
+    AuthService-->>Express: Return { accessToken, refreshToken, user }
+    Express-->>Client: HTTP 200 { success: true, tokens, user }
+
+    Note over Client, Express: Subsequent Protected API Request
+    Client->>Express: GET /api/v1/conversations (Header: Bearer <accessToken>)
+    Express->>Express: Verify JWT Signature & Expiration
+    Express-->>Client: Return Authorized Resource Payload
 ```
 
 ---
 
-## 3. Monorepo Folder Structure Diagram
+## 4. 10-Step AI Request & Chat Execution Flow Diagram
 
 ```mermaid
-graph TD
-    Root["AI-MicroService (Root)"]
-    
-    subgraph ClientDir ["client/ (React + Vite SPA)"]
-        ClientSrc["src/ (Components, Hooks, Services)"]
-        ClientDocker["Dockerfile & nginx.conf"]
-    end
+sequenceDiagram
+    autonumber
+    actor Client as React Client
+    participant Gateway as Express Gateway (:5000)
+    participant FastAPI as FastAPI AI Microservice (:8000)
+    participant ConvRepo as ConversationRepository
+    participant MsgRepo as MessageRepository
+    participant Groq as Groq AI (LLaMA-3)
+    participant UsageRepo as UsageRepository
 
-    subgraph ServerDir ["server/ (Node.js Express Backend)"]
-        ServerRoutes["routes/ (v1/, versionRouter.js)"]
-        ServerControllers["controllers/"]
-        ServerServices["services/"]
-        ServerRepos["repositories/ (interfaces.js, inMemory/, mongodb/)"]
-        ServerMiddleware["middleware/ (security.js, performance.js)"]
-    end
-
-    subgraph AIServiceDir ["ai-service/ (FastAPI Python AI Service)"]
-        AppMain["app/main.py (Lifespan & Middleware)"]
-        AppRouters["app/routers/ (health, chat, conversation, dashboard, versions/)"]
-        AppServices["app/services/ (ai_service.py, memory_service.py)"]
-        AppRepos["app/repositories/ (interfaces.py, factory.py, mongodb.py)"]
-        AppMiddleware["app/middleware/ (security.py, performance.py, logging.py)"]
-        AppCore["app/core/ (config.py, logger.py, metrics.py)"]
-    end
-
-    subgraph DeployDir ["Deployment & Ops"]
-        DockerCompose["docker-compose.yml"]
-        GithubCI[".github/workflows/ci.yml"]
-        EnvExample[".env.example"]
-    end
-
-    Root --> ClientDir
-    Root --> ServerDir
-    Root --> AIServiceDir
-    Root --> DeployDir
+    Client->>Gateway: Step 1: Send User Message POST /api/v1/chat
+    Gateway->>FastAPI: Step 2: Proxy Request to AI Microservice
+    Note over FastAPI: Step 3: Security & Rate Limit Validation
+    FastAPI->>ConvRepo: Step 4: Verify or Create Active Conversation
+    ConvRepo-->>FastAPI: Conversation Header Object
+    FastAPI->>MsgRepo: Step 5: Save Incoming User Message
+    MsgRepo-->>FastAPI: Saved User Message ID
+    FastAPI->>MsgRepo: Step 6: Fetch Last N Context Turns (MAX_HISTORY)
+    MsgRepo-->>FastAPI: Conversation Context History
+    FastAPI->>FastAPI: Step 7: Build System Prompt & Append History
+    FastAPI->>Groq: Step 8: Call Groq LLM API (llama3-70b-8192)
+    Groq-->>FastAPI: Return AI Reply + Token Usage (Prompt & Completion)
+    FastAPI->>MsgRepo: Step 9: Save Assistant AI Response Message
+    FastAPI->>UsageRepo: Step 10: Log Token Telemetry & Latency
+    FastAPI-->>Gateway: HTTP 200 { reply, model, usage, processingTime }
+    Gateway-->>Client: HTTP 200 { success: true, data: {...} }
 ```
 
 ---
 
-## 4. Database ER Diagram (MongoDB Collections)
+## 5. RAG (Retrieval-Augmented Generation) Knowledge Flow Diagram
+
+```mermaid
+flowchart TD
+    subgraph Ingestion ["1. Document Ingestion"]
+        Doc["Uploaded Policy PDF / DOCX"] -->|Text Extraction| Chunks["Text Chunks\n(500 char windows)"]
+        Chunks -->|Embeddings Engine| Vectors["Vector Embeddings\n(1536-dim)"]
+        Vectors -->|Index| VectorStore[("In-Memory LRU Vector Store / MongoDB")]
+    end
+
+    subgraph QueryExecution ["2. Query Retrieval & Context Injection"]
+        UserMsg["User Message"] -->|Query Vectorizer| QueryVec["Query Embedding"]
+        QueryVec -->|Cosine Similarity Search| TopK["Top-K Matching Chunks\n(Threshold > 0.75)"]
+        TopK --> ContextBlock["Formatted Context Block"]
+        ContextBlock --> PromptBuilder["System Prompt Builder"]
+        PromptBuilder --> LLM["Groq LLaMA-3 Inference"]
+        LLM --> Response["Ground Truth AI Response"]
+    end
+```
+
+---
+
+## 6. Database ER Diagram (MongoDB Collections & Relationships)
 
 ```mermaid
 erDiagram
@@ -161,14 +217,14 @@ erDiagram
         string _id PK
         string email UK
         string password_hash
-        string role "Admin | Supervisor | Agent"
+        string role "ADMIN | SUPERVISOR | AGENT"
         string status "ACTIVE | INACTIVE"
         date created_at
     }
 
     REFRESH_TOKEN {
         string _id PK
-        string token UK
+        string token_hash UK
         string user_id FK
         date expires_at "TTL Index: Auto-expiring"
     }
@@ -176,42 +232,44 @@ erDiagram
 
 ---
 
-## 5. Microservice Flow Architecture
+## 7. Monorepo Folder Structure Diagram
 
 ```mermaid
-flowchart LR
-    subgraph Client ["Frontend Edge"]
-        SPA["React SPA"]
+graph TD
+    Root["AI-MicroService (Root)"]
+
+    subgraph ClientDir ["client/ (React 18 + Vite SPA)"]
+        ClientSrc["src/ (Components, Context, Pages, Hooks)"]
+        ClientDocker["Dockerfile & nginx.conf"]
     end
 
-    subgraph Backend ["Express Node Gateway"]
-        Auth["JWT Auth Middleware"]
-        VRouter["Version Router (/api/v1)"]
-        Cache["LRU Cache Layer"]
-        Proxy["Axios AI Proxy"]
+    subgraph ServerDir ["server/ (Node.js Express Backend)"]
+        ServerRoutes["routes/ (v1/, versionRouter.js)"]
+        ServerControllers["controllers/"]
+        ServerServices["services/"]
+        ServerRepos["repositories/ (interfaces.js, inMemory/, mongodb/)"]
+        ServerMiddleware["middleware/ (security.js, performance.js)"]
+        ServerSeed["seed/ (seed.js)"]
     end
 
-    subgraph AIService ["FastAPI Microservice"]
-        SecMw["Security & Rate Limiter"]
-        PerfMw["GZip & ETag Middleware"]
-        LLMEngine["Groq AIServiceManager"]
-        Factory["RepositoryFactory"]
+    subgraph AIServiceDir ["ai-service/ (FastAPI Python AI Service)"]
+        AppMain["app/main.py (Lifespan & Middleware Stack)"]
+        AppRouters["app/routers/ (health, chat, conversation, dashboard, versions/)"]
+        AppServices["app/services/ (ai_service.py, auth_service.py)"]
+        AppRepos["app/repositories/ (interfaces.py, factory.py, mongodb.py)"]
+        AppMiddleware["app/middleware/ (security.py, performance.py, logging.py)"]
+        AppCore["app/core/ (config.py, logger.py, metrics.py)"]
     end
 
-    subgraph DB ["MongoDB Cluster"]
-        Colls[("Conversations\nMessages\nPrompt Logs\nUsage")]
+    subgraph OpsDir ["Deployment & Ops"]
+        DockerCompose["docker-compose.yml"]
+        MongoInit["docker/mongo-init.js"]
+        GithubCI[".github/workflows/ci.yml"]
+        Docs["docs/ (architecture.md, deployment.md)"]
     end
 
-    SPA -->|1. Request| Auth
-    Auth --> VRouter
-    VRouter --> Cache
-    Cache -->|Miss| Proxy
-    Proxy -->|2. HTTP Proxy| SecMw
-    SecMw --> PerfMw
-    PerfMw --> LLMEngine
-    LLMEngine --> Factory
-    Factory -->|3. Persist / Fetch| DB
-    LLMEngine -->|4. Groq Inference| Groq[Groq LLaMA-3]
-    Groq -->|5. Token Stream| LLMEngine
-    LLMEngine -->|6. JSON Response| SPA
+    Root --> ClientDir
+    Root --> ServerDir
+    Root --> AIServiceDir
+    Root --> OpsDir
 ```
