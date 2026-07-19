@@ -1,8 +1,13 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env in current, parent, or root directory
+env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+else:
+    load_dotenv()
 
 class Settings:
     PROJECT_NAME: str = "Enterprise CX Guardian AI"
@@ -33,7 +38,7 @@ class Settings:
     
     # AI & Service Parameters
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    MODEL_NAME: str = os.getenv("MODEL_NAME", "llama3-70b-8192")
+    MODEL_NAME: str = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
     TEMPERATURE: float = float(os.getenv("TEMPERATURE", 0.2))
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", 1024))
     MAX_HISTORY: int = int(os.getenv("MAX_HISTORY", 10))
